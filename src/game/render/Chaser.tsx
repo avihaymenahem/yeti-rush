@@ -16,6 +16,7 @@ import { damp } from '@/game/core/math';
 import { runtime } from '@/game/state/runtime';
 import { chaserPressure, chaserWorldZ } from '@/game/systems/chaser';
 import { GLOSS } from '@/game/config/visuals';
+import { useCastShadows } from '@/game/render/useCastShadows';
 
 const BODY = '#e03a3a';
 const VISOR = '#22303a';
@@ -23,6 +24,7 @@ const SKI = '#2d3a44';
 
 export function Chaser() {
   const groupRef = useRef<THREE.Group>(null);
+  useCastShadows(groupRef);
 
   useFrame((_, delta) => {
     const group = groupRef.current;

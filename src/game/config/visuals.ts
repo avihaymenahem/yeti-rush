@@ -17,14 +17,20 @@
  */
 
 export const PALETTE = {
-  /** Sky, top to bottom. */
-  skyZenith: '#12518f',
-  skyMid: '#5ea3d4',
-  skyHorizon: '#ffcf90',
+  /**
+   * Sky, top to bottom.
+   *
+   * Deliberately a wide hue journey rather than a gentle wash: a deep saturated
+   * blue overhead against a hot orange horizon is most of where the scene's
+   * colour comes from, since the ground is snow and contributes almost none.
+   */
+  skyZenith: '#123a7d',
+  skyMid: '#4e97d6',
+  skyHorizon: '#ffb267',
 
   /** The sun disc and the glow around it. */
   sunCore: '#fff6e0',
-  sunGlow: '#ffb85c',
+  sunGlow: '#ff9f43',
 
   /**
    * Snow under direct light, and in shadow.
@@ -35,7 +41,7 @@ export const PALETTE = {
    * darker, or the whole slope reads as one undifferentiated sheet.
    */
   snowLit: '#fdf3e4',
-  snowShadow: '#6f9ec9',
+  snowShadow: '#5f93c9',
 
   /**
    * The groomed run, deliberately a good few steps down from the surrounding
@@ -43,24 +49,46 @@ export const PALETTE = {
    * drifts, the ice wall - is near-white, and on a near-white piste none of it
    * has a silhouette. A mid-tone run is what gives them one.
    */
-  piste: '#b9d3e8',
-  pisteLine: '#96b8d6',
+  piste: '#aecce9',
+  pisteLine: '#7fb0dd',
 
   /** Distant ranges, furthest first. Cooler and paler with distance. */
-  mountainFar: '#7ea3c6',
-  mountainMid: '#5f86ad',
-  mountainNear: '#456d95',
+  mountainFar: '#8fb6d8',
+  mountainMid: '#6f9ac4',
+  mountainNear: '#5480b0',
 
   /** Atmospheric haze the world fades into. Sits between mid sky and horizon. */
   fog: '#a8cbe4',
 } as const;
 
 export const LIGHTING = {
-  /** Warm key, low and behind-left, so obstacles cast towards the camera. */
+  /**
+   * Warm key, hard over to the left and slightly up-slope, so every visible
+   * face splits cleanly into a lit left and a shadowed right and the cast
+   * shadows fall right and towards the camera where they can be seen.
+   *
+   * Pushed much further left than it used to sit. A key nearly overhead lights
+   * the tops of things and leaves the sides evenly lit, which on flat-shaded
+   * geometry means no form at all - the facets need a raking angle to separate.
+   *
+   * The distance is what the *shadow* camera needs, not the shading: a
+   * directional light's contribution depends only on direction, so it is pushed
+   * far enough out that the whole visible slope sits inside the shadow frustum.
+   *
+   * Elevation is set by shadow *length*, and it is the one place the rig
+   * knowingly disagrees with the sky. The warm horizon this palette is built
+   * around needs a sun sitting almost on the skyline, and a light at that angle
+   * throws shadows several times the height of what casts them - a fence turns
+   * into a black band across two lanes. So the key is lifted to about 45
+   * degrees, where a shadow is roughly as long as its object is tall, while
+   * `SKY.sunDirection` keeps the low sun that makes the horizon glow. Stylised
+   * art does this constantly; the alternative is choosing between a flat sky and
+   * an unreadable slope.
+   */
   key: {
     color: '#fff0d2',
-    intensity: 2.5,
-    position: [-9, 11, -6] as const,
+    intensity: 2.7,
+    position: [-46, 52, -20] as const,
   },
   /**
    * Cool rim from behind the camera's right, catching the near edges of
@@ -80,9 +108,69 @@ export const LIGHTING = {
   ambient: {
     sky: '#9fcbec',
     ground: '#d9c9ad',
-    intensity: 0.55,
+    /**
+     * Lifted back up once the key started casting. Ambient is the *only* thing
+     * lighting the inside of a cast shadow, so with real shadows in the scene
+     * this number stopped being "how flat is everything" and became "how black
+     * are the shadows" - too low and a tree lays a hole in the snow.
+     */
+    intensity: 0.5,
   },
 } as const;
+
+/**
+ * Cast shadows from the key light.
+ *
+ * The original decision was no shadow maps at all, because a shadow pass is the
+ * fastest way to lose 60 fps on a mid-range Android GPU. What makes them
+ * affordable here is the treadmill: **the player never moves**, so the shadow
+ * camera can be pinned to the origin and never updated. It needs to cover only
+ * the near slope, which is a small fixed box rather than a frustum chasing a
+ * moving character across an open world - and a static shadow camera also means
+ * no texel-snapping shimmer as it slides, which is the usual reason cascades
+ * exist. The whole feature is a consequence of an architecture rule chosen for
+ * completely different reasons.
+ *
+ * Only what reads at close range casts. Coins, snow particles, mountains and
+ * the sky are all excluded: hundreds of tiny casters would cost the entire
+ * saving for shadows too small to resolve.
+ */
+export const SHADOW = {
+  /**
+   * Shadow map resolution. The first lever to pull if a weaker device
+   * struggles - 1024 still reads, 512 starts to blob.
+   *
+   * Non-power-of-two is fine on WebGL2, and 1536 lands between the 9 MB this
+   * costs and the 16 MB a 2048 map would.
+   */
+  mapSize: 1536,
+  /**
+   * Half-extents of the orthographic box, in light space. Sized to the slope
+   * the player can actually see rather than the draw distance: past the near
+   * field the fog has taken over and a missing shadow is invisible.
+   */
+  halfWidth: 26,
+  halfDepth: 42,
+  near: 20,
+  far: 130,
+  /**
+   * Depth bias. Negative, and paired with a normal bias, because flat-shaded
+   * geometry at a raking angle is exactly the case that acnes: large flat
+   * facets nearly parallel to the light span many depth values per texel.
+   */
+  bias: -0.0012,
+  normalBias: 0.04,
+} as const;
+
+/**
+ * Saturation applied to colours baked out of imported models.
+ *
+ * The CC0 packs are authored for a neutral viewer and land muted against this
+ * palette - the pines in particular read grey-green next to a hot horizon.
+ * Applied at bake time rather than as a screen-space filter, so it costs
+ * nothing per frame and never touches the snow, which is meant to stay pale.
+ */
+export const IMPORT_SATURATION: number = 1.22;
 
 /**
  * Painted behind the canvas so there is no white flash before the first frame,
@@ -134,8 +222,13 @@ export const ATMOSPHERE = {
    * Exposure into the filmic tone curve. ACES already lifts and desaturates,
    * so pushing exposure above 1 on an already-pale snow palette is what turns
    * the whole scene milky.
+   *
+   * Pulled slightly under 1. ACES desaturates hardest in the shoulder, and on a
+   * snow scene the snow *is* the shoulder - so a little less exposure keeps
+   * more of the frame off the part of the curve that drains the colour out of
+   * it, without giving up the highlight rolloff that stops the slope clipping.
    */
-  exposure: 1.0,
+  exposure: 0.92,
   /**
    * Exponential fog density.
    *
@@ -161,7 +254,7 @@ export const SKY = {
   sunDirection: [-0.55, 0.28, -0.79] as const,
   /** Angular size of the disc, and of the glow around it. */
   sunSize: 0.026,
-  sunGlowSize: 0.28,
+  sunGlowSize: 0.22,
 } as const;
 
 export const MOUNTAINS = {

@@ -75,7 +75,7 @@ export function Fences() {
   });
 
   return (
-    <instancedMesh
+    <instancedMesh castShadow receiveShadow
       ref={meshRef}
       geometry={geometry}
       material={material}

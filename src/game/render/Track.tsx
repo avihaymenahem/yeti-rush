@@ -34,14 +34,14 @@ function Ground() {
       {/* Far wider than the track needs: on a tablet the horizontal field of
           view is wide enough to see past a narrow plane, and the exposed edge
           against the sky is very obvious. One extra plane costs nothing. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, TRACK_CENTRE_Z]}>
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, TRACK_CENTRE_Z]}>
         <planeGeometry args={[300, TRACK_SPAN + 40]} />
         <meshPhongMaterial color={TRACK_COLORS.snow} specular={GLOSS.snow.specular} shininess={GLOSS.snow.shininess} />
       </mesh>
 
       {/* The groomed run, a shade cooler than the field either side of it. Its
           edges are what tell the player where the playable width ends. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, TRACK_CENTRE_Z]}>
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, TRACK_CENTRE_Z]}>
         <planeGeometry args={[9.2, TRACK_SPAN + 40]} />
         <meshPhongMaterial color={TRACK_COLORS.piste} specular={GLOSS.snow.specular} shininess={GLOSS.snow.shininess} />
       </mesh>
@@ -65,7 +65,7 @@ function LaneGuides() {
   return (
     <>
       {boundaries.map((x) => (
-        <mesh key={x} position={[x, 0.012, TRACK_CENTRE_Z]}>
+        <mesh key={x} receiveShadow position={[x, 0.012, TRACK_CENTRE_Z]}>
           <boxGeometry args={[0.09, 0.02, TRACK_SPAN + 40]} />
           <meshPhongMaterial color={TRACK_COLORS.laneGuide} specular={GLOSS.snow.specular} shininess={GLOSS.snow.shininess} />
         </mesh>

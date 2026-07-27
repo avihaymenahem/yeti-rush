@@ -75,7 +75,7 @@ function ModelObstacleLayer({ kind, spec }: { kind: ObstacleKind; spec: ModelSpe
   useObstacleInstances(meshRef, kind, 0);
 
   return (
-    <instancedMesh
+    <instancedMesh castShadow receiveShadow
       ref={meshRef}
       geometry={geometry}
       material={material}
@@ -95,7 +95,7 @@ function PropObstacleLayer({ kind }: { kind: ObstacleKind & PropKind }) {
   useObstacleInstances(meshRef, kind, 0);
 
   return (
-    <instancedMesh
+    <instancedMesh castShadow receiveShadow
       ref={meshRef}
       geometry={geometry}
       material={material}
@@ -113,7 +113,7 @@ function BoxObstacleLayer({ kind }: { kind: ObstacleKind }) {
   useObstacleInstances(meshRef, kind, def.centreY);
 
   return (
-    <instancedMesh
+    <instancedMesh castShadow receiveShadow
       ref={meshRef}
       args={[undefined, undefined, MAX_OBSTACLES]}
       frustumCulled={false}

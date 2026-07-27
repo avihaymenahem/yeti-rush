@@ -51,7 +51,7 @@ export function Ramps() {
   });
 
   return (
-    <instancedMesh
+    <instancedMesh castShadow receiveShadow
       ref={meshRef}
       geometry={geometry}
       material={material}

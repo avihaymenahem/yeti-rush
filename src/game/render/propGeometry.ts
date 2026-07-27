@@ -25,27 +25,27 @@ import { TUNING } from '@/game/config/tuning';
 import { assemble, prism, wedge, type Piece } from '@/game/render/mergeParts';
 
 const COLORS = {
-  timber: '#8a5a3c',
-  timberDark: '#5e3b26',
+  timber: '#9a5f36',
+  timberDark: '#67391f',
   plaster: '#e8d9c3',
   roof: '#4a5a68',
   snow: '#fdf3e4',
-  window: '#ffd98a',
-  banner: '#e8663c',
+  window: '#ffcd63',
+  banner: '#f45c31',
   bannerTrim: '#f7fbfe',
-  post: '#6b4a30',
-  bough: '#5b4636',
-  needle: '#2f6b4f',
+  post: '#7d5029',
+  bough: '#63452e',
+  needle: '#2b8452',
   /** Split logs: bark, and the pale sawn face the player actually sees. */
-  bark: '#8c6039',
-  barkLight: '#a37a4d',
+  bark: '#98632f',
+  barkLight: '#b28243',
   cut: '#e0bb8c',
   cutLight: '#f0d5ae',
   /** Groomed take-off snow, a shade off the piste so the ramp reads as built. */
   packedSnow: '#eaf3fa',
-  rampTimber: '#7a5233',
+  rampTimber: '#8a552b',
   /** Chevrons. Warm against a cold slope, so they carry at distance. */
-  rampMark: '#f0a63c',
+  rampMark: '#ffa724',
   /** Grind rail: galvanised steel, a lit top edge, and darker posts. */
   railSteel: '#8d9aa8',
   railShine: '#e6eef6',

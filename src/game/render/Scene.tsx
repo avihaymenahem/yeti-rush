@@ -1,11 +1,12 @@
 /**
  * Scene assembly and the camera rig.
  *
- * Deliberately cheap: three lights, no shadow maps, no environment map, no
- * render-target post-processing. Real-time shadows are the single fastest way
- * to lose 60 fps on a mid-range Android GPU, so the player gets a blob shadow,
- * and the grade is a DOM overlay rather than a fullscreen pass (see `Grade`
- * in index.css) so it costs the 3D pipeline nothing at all.
+ * Deliberately cheap: exactly one shadow-casting light, no environment map, no
+ * render-target post-processing. A shadow pass is affordable here only because
+ * the player never moves, so the shadow camera is a small fixed box rather than
+ * a frustum chasing a character - see `SHADOW`. The grade is a DOM overlay
+ * rather than a fullscreen pass (see `.grade` in index.css) so it costs the 3D
+ * pipeline nothing at all.
  *
  * What does the visual work instead is hue: a warm key against cool ambient and
  * a cold rim, a graded sky with a sun in it, and layered mountains for depth.
@@ -111,10 +112,19 @@ function CameraRig() {
   return null;
 }
 
+/** Faint, because the key light's cast shadow is now the dramatic one. */
+const CONTACT_OPACITY = 0.2;
+
 /**
- * Cheap fake shadow: a flat translucent disc that shrinks and fades as the
- * player rises. This is the entire shadow budget for the game, and it is also
- * the only cue for how high a jump currently is.
+ * A flat translucent disc directly under the player, shrinking and fading as
+ * they rise.
+ *
+ * Kept even now that the key light casts real shadows, and deliberately made
+ * fainter rather than removed. The cast shadow is thrown off to the right by a
+ * raking light, which is what sells the lighting but is a poor altitude gauge -
+ * height and lane offset both move it sideways. This sits square underneath and
+ * answers "how high am I, over what" on its own, which at thirty units a second
+ * is a gameplay readout rather than decoration.
  */
 function BlobShadow() {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -127,13 +137,13 @@ function BlobShadow() {
     // Full size and darkest on the ground, gone by peak jump height.
     const height01 = clamp01(runtime.player.y / TUNING.player.jumpPeakHeight);
     mesh.scale.setScalar(1 - height01 * 0.45);
-    (mesh.material as THREE.MeshBasicMaterial).opacity = 0.34 * (1 - height01 * 0.7);
+    (mesh.material as THREE.MeshBasicMaterial).opacity = CONTACT_OPACITY * (1 - height01 * 0.7);
   });
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, TUNING.player.z]}>
       <circleGeometry args={[0.55, 16]} />
-      <meshBasicMaterial color={PALETTE.snowShadow} transparent opacity={0.34} depthWrite={false} />
+      <meshBasicMaterial color={PALETTE.snowShadow} transparent opacity={CONTACT_OPACITY} depthWrite={false} />
     </mesh>
   );
 }

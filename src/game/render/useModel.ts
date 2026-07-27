@@ -31,7 +31,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import colormapUrl from '@/assets/models/colormap.png';
-import { GLOSS } from '@/game/config/visuals';
+import { GLOSS, IMPORT_SATURATION } from '@/game/config/visuals';
 
 export interface ModelSpec {
   url: string;
@@ -96,6 +96,17 @@ function bakeVertexColor(
   const baked = colour.clone();
   if (recolor) {
     baked.lerp(new THREE.Color(recolor.color), THREE.MathUtils.clamp(recolor.amount, 0, 1));
+  }
+
+  // Lift the saturation of whatever the pack authored. Done in HSL so the hue
+  // and lightness the artist chose survive untouched - scaling the RGB channels
+  // instead would drag every colour towards its dominant primary and turn the
+  // pines cyan. Near-white parts (snow caps) have almost no saturation to
+  // scale, so they are left alone for free, which is what we want.
+  if (IMPORT_SATURATION !== 1) {
+    const hsl = { h: 0, s: 0, l: 0 };
+    baked.getHSL(hsl);
+    baked.setHSL(hsl.h, Math.min(1, hsl.s * IMPORT_SATURATION), hsl.l);
   }
 
   const count = geometry.getAttribute('position').count;

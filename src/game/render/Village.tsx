@@ -87,11 +87,11 @@ function Chalets({ count = 18 }: { count?: number }) {
 
   return (
     <>
-      <instancedMesh ref={wallsRef} args={[undefined, undefined, count]} frustumCulled={false}>
+      <instancedMesh castShadow receiveShadow ref={wallsRef} args={[undefined, undefined, count]} frustumCulled={false}>
         <boxGeometry args={[3, 2.2, 3.4]} />
         <meshPhongMaterial color={COLORS.wall} flatShading specular={GLOSS.prop.specular} shininess={GLOSS.prop.shininess} />
       </instancedMesh>
-      <instancedMesh ref={roofsRef} args={[undefined, undefined, count]} frustumCulled={false}>
+      <instancedMesh castShadow receiveShadow ref={roofsRef} args={[undefined, undefined, count]} frustumCulled={false}>
         {/* Four-sided cone: a hipped alpine roof under deep snow. */}
         <coneGeometry args={[2.9, 1.6, 4]} />
         <meshPhongMaterial color={COLORS.roof} flatShading specular={GLOSS.snow.specular} shininess={GLOSS.snow.shininess} />
@@ -122,7 +122,7 @@ function Pylons({ count = 8 }: { count?: number }) {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
+    <instancedMesh castShadow receiveShadow ref={meshRef} args={[undefined, undefined, count]} frustumCulled={false}>
       <cylinderGeometry args={[0.22, 0.32, 9, 6]} />
       <meshPhongMaterial color={COLORS.pylon} flatShading specular={GLOSS.polished.specular} shininess={GLOSS.polished.shininess} />
     </instancedMesh>

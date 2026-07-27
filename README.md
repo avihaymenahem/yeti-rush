@@ -297,11 +297,18 @@ is likewise dynamically imported behind a DEV guard - a static import would ship
 
 Budget: 60 fps and under ~60 draw calls on a mid-range Android device.
 
-Measured on desktop at 375x812: **35 draw calls, ~23,000 triangles** (before
-rails, which add one instanced mesh). Everything repeated is instanced - one
-draw call for all coins, one per obstacle kind, one per tree variant, one for
-the ramps, one for the rails, one for the snow (900 flakes animated entirely in
-the vertex shader), one for the snow spray - and the yeti is ten.
+Measured on desktop at 375x812: **59 draw calls, ~58,600 triangles**, of which
+the shadow pass is **+22 calls and +19,300 triangles** (37 / 39,300 with
+`shadows` off). Everything repeated is instanced - one draw call for all coins,
+one per obstacle kind, one per tree variant, one for the ramps, one for the
+rails, one for the snow (900 flakes animated entirely in the vertex shader),
+one for the snow spray - and the yeti is ten.
+
+That leaves the frame sitting right on the ~60 call budget rather than
+comfortably inside it. Most of the shadow pass is the yeti: ten separately
+animated meshes means ten shadow draws for one small character. If the budget
+ever needs reclaiming, casting from only its torso and board is the cheapest
+place to look, followed by `SHADOW.mapSize`.
 
 Merging is what keeps that number flat while the content grows: importing real
 models moved it by one, and rebuilding the yeti from a handful of capsules into
@@ -311,8 +318,14 @@ Known slack if it is ever needed: each mountain range draws two copies of its
 geometry side by side to hide the parallax seam, which could be merged into one
 geometry per layer and save three calls.
 
-No real-time shadows (the player gets a blob shadow), no environment maps, no
-post-processing, `dpr` capped at 2, fog hiding the spawn distance. The render
+**Soft cast shadows** from the key light only, and affordable for a reason
+specific to this game: the player never moves, so the shadow camera is a small
+box pinned to the origin that is configured once and never updated - no frustum
+chasing a character, and no texel-snap shimmer. See `SHADOW` in `visuals.ts`.
+Coins, snow and the mountains are excluded from casting.
+
+No environment maps, no post-processing, `dpr` capped at 2, fog hiding the spawn
+distance. The render
 loop stops entirely when the app is backgrounded, and the fixed timestep is reset
 on resume so the simulation never lurches forward.
 
@@ -374,7 +387,15 @@ so the sky, fog, lighting, snow and grade all agree. The look is late-afternoon
 alpine: a low warm sun, deep blue overhead fading to gold at the horizon, warm
 highlights on the snow and distinctly cool violet-blue shadows.
 
-Two ideas do most of the work:
+Three ideas do most of the work:
+
+**A raking key from the left, and it casts.** The light sits hard over to the
+left at about 45 degrees, so every visible face splits into a lit side and a
+shadowed one and the cast shadows fall right and towards the camera where they
+can be seen. Elevation is chosen by shadow *length*: it is the one place the rig
+knowingly disagrees with the sky, because the warm horizon this palette is built
+on needs a sun almost on the skyline, and a light at that angle turns a fence
+into a black band across two lanes.
 
 **Hue, not brightness.** Flat-shaded low-poly geometry has no surface detail to
 catch light, so a face turning away from the sun has to change *colour* rather

@@ -22,6 +22,7 @@ import { LANES, TUNING } from '@/game/config/tuning';
 import { clamp, clamp01, damp } from '@/game/core/math';
 import { skinDef } from '@/game/content/skins';
 import { buildYeti, SCARF_LINK_LENGTH, YETI_JOINTS } from '@/game/render/yetiGeometry';
+import { useCastShadows } from '@/game/render/useCastShadows';
 import { useMetaStore } from '@/game/state/metaStore';
 import { runtime } from '@/game/state/runtime';
 import { laneToX } from '@/game/systems/lanes';
@@ -46,6 +47,7 @@ export function Player() {
   const parts = useMemo(() => buildYeti(skin), [skin]);
 
   const rootRef = useRef<THREE.Group>(null);
+  useCastShadows(rootRef);
   const boardRef = useRef<THREE.Group>(null);
   const torsoRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);

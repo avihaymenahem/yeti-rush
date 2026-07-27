@@ -13,8 +13,8 @@
  */
 
 import { useFrame } from '@react-three/fiber';
-import { lazy, Suspense, useRef } from 'react';
-import type * as THREE from 'three';
+import { lazy, Suspense, useMemo, useRef } from 'react';
+import * as THREE from 'three';
 import { TUNING } from '@/game/config/tuning';
 import { ATMOSPHERE, PALETTE } from '@/game/config/visuals';
 import { clamp01, damp } from '@/game/core/math';
@@ -126,8 +126,48 @@ const CONTACT_OPACITY = 0.2;
  * answers "how high am I, over what" on its own, which at thirty units a second
  * is a gameplay readout rather than decoration.
  */
+/**
+ * A radial falloff drawn once into a small canvas.
+ *
+ * The disc this replaced was a sixteen-segment circle with a hard rim, which
+ * read as a polygon stamped on the snow next to a genuinely soft cast shadow.
+ * A gradient costs one 64x64 texture and no geometry, and needs no shader.
+ * `pow` on the alpha keeps the middle dark and pulls the falloff outwards,
+ * because a straight linear ramp reads as a grey smudge with no centre.
+ */
+function contactTexture(): THREE.Texture {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext('2d');
+  if (context) {
+    const image = context.createImageData(size, size);
+    const centre = (size - 1) / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x - centre) / centre;
+        const dy = (y - centre) / centre;
+        const falloff = clamp01(1 - Math.hypot(dx, dy));
+        const i = (y * size + x) * 4;
+        image.data[i] = 255;
+        image.data[i + 1] = 255;
+        image.data[i + 2] = 255;
+        image.data[i + 3] = Math.round(255 * Math.pow(falloff, 1.6));
+      }
+    }
+    context.putImageData(image, 0, 0);
+  }
+
+  const texture = new THREE.Texture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function BlobShadow() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const texture = useMemo(() => contactTexture(), []);
 
   useFrame(() => {
     const mesh = meshRef.current;
@@ -142,8 +182,14 @@ function BlobShadow() {
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, TUNING.player.z]}>
-      <circleGeometry args={[0.55, 16]} />
-      <meshBasicMaterial color={PALETTE.snowShadow} transparent opacity={CONTACT_OPACITY} depthWrite={false} />
+      <planeGeometry args={[1.5, 1.5]} />
+      <meshBasicMaterial
+        map={texture}
+        color={PALETTE.snowShadow}
+        transparent
+        opacity={CONTACT_OPACITY}
+        depthWrite={false}
+      />
     </mesh>
   );
 }

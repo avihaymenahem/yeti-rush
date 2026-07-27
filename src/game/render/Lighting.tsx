@@ -46,6 +46,11 @@ export function Lighting() {
 
     light.shadow.bias = SHADOW.bias;
     light.shadow.normalBias = SHADOW.normalBias;
+    // The blur that makes the edges soft. Only VSM reads these - under PCF
+    // `radius` is ignored entirely, which is exactly why the first pass at this
+    // came out stair-stepped however large the map got.
+    light.shadow.radius = SHADOW.radius;
+    light.shadow.blurSamples = SHADOW.blurSamples;
   }, []);
 
   return (

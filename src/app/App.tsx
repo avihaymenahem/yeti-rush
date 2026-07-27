@@ -146,16 +146,21 @@ export function App() {
         // Cap device pixel ratio: a 3x phone screen renders 9x the pixels for
         // no visible gain on flat-shaded low-poly art.
         dpr={[1, 2]}
-        // Soft cast shadows from the key light. `PCFSoft` rather than plain
-        // `PCF` because the shadow map is deliberately modest and a hard kernel
-        // at this resolution gives stair-stepped edges across the snow, which
-        // is far more noticeable than a soft blob being slightly too soft.
-        shadows={{ type: THREE.PCFSoftShadowMap }}
+        // Variance shadow maps, which is what makes the edges genuinely soft.
+        // Every flavour of PCF - `PCFSoftShadowMap` very much included - samples
+        // a fixed few neighbouring texels, so a thin caster like a fence rail
+        // produces a two-texel shadow that stays a two-texel staircase whatever
+        // the map resolution. VSM stores depth statistically and can be blurred
+        // properly, so the penumbra is smooth rather than dithered.
+        shadows={{ type: THREE.VSMShadowMap }}
         // Tone mapping set here so the renderer is constructed with it, rather
         // than mutated afterwards. Without a tone curve the lit snow clips to
         // pure white and every highlight reads as the same flat value.
         gl={{
-          antialias: false,
+          // Multisampling, for the geometry edges the shadow work cannot touch.
+          // Nearly free on the tile-based GPUs phones use, where it resolves
+          // inside tile memory rather than costing a full-resolution buffer.
+          antialias: true,
           powerPreference: 'high-performance',
           alpha: false,
           toneMapping: THREE.ACESFilmicToneMapping,

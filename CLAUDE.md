@@ -138,6 +138,17 @@ grep -o 'index-[A-Za-z0-9_-]*\.js' dist/index.html android/app/src/main/assets/p
 
 A stale APK has more than once looked exactly like a fix that did not work.
 
+## Shadows
+
+Variance shadow maps, not PCF. `PCFSoftShadowMap` cannot blur - it samples a
+fixed few texels and dithers the edge without widening it - so thin casters
+stair-step however large the map gets. That was a real, shipped complaint. If
+shadow quality is ever revisited, `SHADOW.radius` and `blurSamples` are the
+softness, and `mapSize` divided by the frustum area is the detail.
+
+The shadow camera is pinned to the origin and configured once, which is only
+possible because the player never moves. Do not make it follow anything.
+
 ## Web demo
 
 Published to <https://avihaymenahem.github.io/yeti-rush/> by

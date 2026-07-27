@@ -137,29 +137,51 @@ export const LIGHTING = {
  */
 export const SHADOW = {
   /**
-   * Shadow map resolution. The first lever to pull if a weaker device
-   * struggles - 1024 still reads, 512 starts to blob.
+   * Shadow map resolution.
    *
-   * Non-power-of-two is fine on WebGL2, and 1536 lands between the 9 MB this
-   * costs and the 16 MB a 2048 map would.
+   * Resolution alone was never what made the first attempt look stair-stepped -
+   * a fence rail is a hundred millimetres thick, so its shadow is a couple of
+   * texels wide however big the map is, and a couple of texels is a staircase.
+   * What fixes that is blurring the map (see `blurSamples`); the resolution just
+   * decides how much detail there is to blur.
    */
-  mapSize: 1536,
+  mapSize: 2048,
   /**
-   * Half-extents of the orthographic box, in light space. Sized to the slope
-   * the player can actually see rather than the draw distance: past the near
-   * field the fog has taken over and a missing shadow is invisible.
+   * Half-extents of the orthographic box, in light space.
+   *
+   * Tightened hard, because texel density is resolution *divided by area* and
+   * the area is the half nobody looks at. This covers the near slope, which is
+   * all that matters: past it the fog has taken over and a missing shadow is
+   * invisible. Together with the larger map, a texel went from about 4 cm to
+   * under 2 cm.
    */
-  halfWidth: 26,
-  halfDepth: 42,
+  halfWidth: 19,
+  halfDepth: 33,
   near: 20,
   far: 130,
   /**
-   * Depth bias. Negative, and paired with a normal bias, because flat-shaded
-   * geometry at a raking angle is exactly the case that acnes: large flat
-   * facets nearly parallel to the light span many depth values per texel.
+   * How far the shadow map is blurred, in texels, and how many taps do it.
+   *
+   * This is the setting that makes a shadow *soft* rather than merely small.
+   * PCF - including three's confusingly named `PCFSoftShadowMap` - samples a
+   * fixed handful of neighbouring texels, which dithers an edge without ever
+   * widening it, so a two-texel-wide shadow stays a two-texel staircase. VSM
+   * stores depth statistically and can therefore be genuinely blurred, giving a
+   * penumbra with no stepping at any resolution.
+   *
+   * The cost is light bleeding where one caster stands close behind another.
+   * On an open slope with sparse trees that case barely arises, which is what
+   * makes VSM the right trade here and the wrong one in an interior.
    */
-  bias: -0.0012,
-  normalBias: 0.04,
+  radius: 5,
+  blurSamples: 12,
+  /**
+   * VSM does not need the depth bias PCF does - it compares distributions
+   * rather than a single depth, so the usual acne does not arise and a bias
+   * large enough to matter only detaches shadows from their casters.
+   */
+  bias: 0,
+  normalBias: 0,
 } as const;
 
 /**

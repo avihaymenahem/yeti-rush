@@ -318,8 +318,17 @@ Known slack if it is ever needed: each mountain range draws two copies of its
 geometry side by side to hide the parallax seam, which could be merged into one
 geometry per layer and save three calls.
 
-**Soft cast shadows** from the key light only, and affordable for a reason
-specific to this game: the player never moves, so the shadow camera is a small
+**Soft cast shadows** from the key light only, using **variance shadow maps**.
+The choice matters more than the resolution does: every flavour of PCF -
+including three's misleadingly named `PCFSoftShadowMap` - samples a fixed few
+neighbouring texels, which dithers an edge without ever widening it. A fence
+rail is a hundred millimetres thick, so its shadow is two texels wide whatever
+the map size, and two texels is a staircase. VSM stores depth statistically and
+can be blurred properly, so the penumbra is smooth at any resolution. The cost
+is light bleeding where one caster stands close behind another, which on an open
+slope with sparse trees barely arises - it would be the wrong trade indoors.
+
+Shadows are affordable at all for a reason specific to this game: the player never moves, so the shadow camera is a small
 box pinned to the origin that is configured once and never updated - no frustum
 chasing a character, and no texel-snap shimmer. See `SHADOW` in `visuals.ts`.
 Coins, snow and the mountains are excluded from casting.

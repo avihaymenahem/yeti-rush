@@ -7,6 +7,22 @@ thematically an alpine winter.
 
 React 19 + TypeScript + Three.js (react-three-fiber) + Capacitor.
 
+## Play it
+
+**[Play in the browser](https://avihaymenahem.github.io/yeti-rush/)** — arrow
+keys or WASD on desktop, swipe on a touchscreen. Every push to `main`
+redeploys it.
+
+**[Download the Android APK](https://github.com/avihaymenahem/yeti-rush/releases/latest)**
+— debug-signed, so allow installs from your browser or file manager. The
+project ships no keystore: a signing key is a credential its owner should
+create and back up, since losing it means never being able to update the app
+under the same package name.
+
+The web build is the same bundle the app runs. Haptics no-op in a browser and
+the save falls back to `localStorage` instead of Capacitor Preferences; nothing
+else differs.
+
 Contributing or picking this up with an agent? [CLAUDE.md](CLAUDE.md) is the
 working agreement — the invariants that must not be broken and the mistakes
 already paid for.
@@ -324,6 +340,32 @@ Shipping to the Play Store additionally needs a keystore and a signing config in
 
 iOS is not set up; it needs macOS. The project is structured so `npx cap add ios`
 is the only step required.
+
+### The web demo
+
+`.github/workflows/pages.yml` builds and publishes to GitHub Pages on every push
+to `main`, after `npm run check` passes - the demo is the public face of the
+project, and shipping a build that fails its own suite would be worse than not
+shipping one.
+
+The one trap is the **base path**, and it is worth understanding before touching
+it. Pages serves from a repository subpath (`/yeti-rush/`), while Capacitor loads
+the identical bundle from the *root* of the Android WebView's asset server. The
+two requirements are mutually exclusive, so hardcoding either one ships a working
+demo and a black screen on the phone, or the reverse. `vite.config.ts` reads
+`base` from `PAGES_BASE`, which only the Pages workflow sets.
+
+To reproduce a Pages build locally - note that `vite preview` needs the same base
+or it serves at the root while the HTML points at the subpath:
+
+```bash
+PAGES_BASE=/yeti-rush/ npm run build   # PowerShell: $env:PAGES_BASE='/yeti-rush/'
+npm run preview:pages
+```
+
+`index.html` is also copied to `404.html`. Pages has no server-side routing, so
+a refresh or a deep link would otherwise 404 rather than reaching the app, which
+renders every screen itself.
 
 ## Art direction
 

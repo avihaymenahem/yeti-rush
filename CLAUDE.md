@@ -137,3 +137,15 @@ grep -o 'index-[A-Za-z0-9_-]*\.js' dist/index.html android/app/src/main/assets/p
 ```
 
 A stale APK has more than once looked exactly like a fix that did not work.
+
+## Web demo
+
+Published to <https://avihaymenahem.github.io/yeti-rush/> by
+`.github/workflows/pages.yml` on every push to `main`.
+
+**Never hardcode Vite's `base`.** Pages serves from `/yeti-rush/`; Capacitor
+loads the identical bundle from the *root* of the Android WebView's asset
+server. Hardcoding either one ships a working demo and a black screen on the
+phone, or the reverse. `vite.config.ts` reads `PAGES_BASE`, set only by the
+workflow. `vite preview` needs the same base or it serves at the root while the
+HTML points at the subpath.

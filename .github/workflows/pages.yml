@@ -1,0 +1,64 @@
+# Publishes the web build to GitHub Pages as a playable demo.
+#
+# The bundle has to know it is served from a repository subpath rather than a
+# domain root, or every hashed asset URL 404s. `PAGES_BASE` is read by
+# vite.config.ts; it is set only here, so the Capacitor build - which loads the
+# same bundle from the root of the Android WebView's asset server - is unaffected.
+name: Deploy demo to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. In-progress runs finish rather than being
+# cancelled, so a half-uploaded artifact can never become the live site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The demo is the public face of the project; shipping a build that fails
+      # its own suite would be worse than not shipping one.
+      - run: npm run check
+
+      - run: npm run build
+        env:
+          PAGES_BASE: /${{ github.event.repository.name }}/
+
+      # Pages has no server-side routing, so a deep link or a refresh would 404.
+      # The app is a single page that renders every screen itself, so serving
+      # index.html as the 404 body hands control back to it.
+      - run: cp dist/index.html dist/404.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

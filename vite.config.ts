@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  /**
+   * Where the bundle believes it is served from.
+   *
+   * Root by default, which is what Capacitor needs - the Android WebView loads
+   * the copied bundle from the top of its own asset server, and a hardcoded
+   * project path would break every asset URL in the app. GitHub Pages serves
+   * from a repository subpath instead, so the Pages workflow sets `PAGES_BASE`
+   * and nothing else has to know.
+   */
+  base: process.env.PAGES_BASE ?? '/',
   plugins: [react()],
   resolve: {
     alias: {

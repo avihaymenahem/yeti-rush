@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Alpine sky. Matches the sky variable in src/index.css and the Capacitor
+         splash config, so there is no colour flash between splash and scene. -->
+    <color name="skyBlue">#5EA3D4</color>
+    <color name="skyBlueDark">#3D7FB0</color>
+
+    <color name="colorPrimary">@color/skyBlue</color>
+    <color name="colorPrimaryDark">@color/skyBlueDark</color>
+    <color name="colorAccent">#2FA8E0</color>
+</resources>

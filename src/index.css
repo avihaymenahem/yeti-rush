@@ -1,0 +1,1210 @@
+/*
+ * Global reset + mobile hardening.
+ * Everything here exists to make a WebView behave like a game surface rather
+ * than a scrollable document: no bounce, no zoom, no text selection, no
+ * browser-owned gestures stealing our swipes.
+ */
+
+:root {
+  /* Mid-sky. Kept in step with PALETTE.skyMid in game/config/visuals.ts, and
+     with the Android splash colour, so launch has no colour flash. */
+  --sky: #5ea3d4;
+  --snow: #fdf3e4;
+  --ink: #16283a;
+  --accent: #2fa8e0;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sky);
+}
+
+body {
+  /* Kill every browser gesture that competes with gameplay input. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+  outline: none;
+}
+
+/*
+ * Colour grade and vignette.
+ *
+ * Done as a DOM overlay rather than a fullscreen shader pass. A render-target
+ * post chain costs an extra full-resolution draw plus the target itself, which
+ * on a mid-range mobile GPU is a real slice of the frame budget - and for a
+ * vignette and a slight warm lift, the compositor gives the identical result
+ * for free. Non-interactive and above the canvas but below every UI layer.
+ */
+.grade {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  /* Darkened corners focus the eye on the lane ahead. */
+  background:
+    radial-gradient(
+      ellipse 78% 62% at 50% 42%,
+      rgba(0, 0, 0, 0) 40%,
+      rgba(12, 34, 58, 0.16) 78%,
+      rgba(10, 28, 50, 0.36) 100%
+    );
+}
+
+/* A warm lift in the upper frame, matching the low sun in the sky dome. */
+.grade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 197, 122, 0.13) 0%,
+    rgba(255, 210, 150, 0.05) 30%,
+    rgba(120, 170, 210, 0) 60%
+  );
+  mix-blend-mode: soft-light;
+}
+
+/* Full-bleed layer that sits above the canvas and owns all pointer input. */
+.layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  /* Swipes are read from pointermove, so the browser must not claim the drag
+     as a pan partway through and cancel the pointer. */
+  touch-action: none;
+}
+
+/* UI inside a layer respects device safe areas; the canvas underneath does not. */
+.layer-safe {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+/* Layers that should not eat touches meant for the input surface. */
+.layer-passthrough {
+  pointer-events: none;
+}
+
+.layer-passthrough > * {
+  pointer-events: auto;
+}
+
+/* --- HUD ------------------------------------------------------------- */
+
+.hud {
+  /* Sits above the input surface but never intercepts a swipe. */
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.hud > * {
+  pointer-events: none;
+}
+
+.hud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.1rem 0;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+/* The one thing on the HUD that takes a tap, so it opts back into pointers. */
+.hud-pause {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.42);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-shadow: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hud-pause:active {
+  background: rgba(20, 45, 62, 0.6);
+}
+
+.hud-score {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hud-coins {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #b8791a;
+}
+
+.hud-coins::before {
+  content: '◕ ';
+  color: #f0b429;
+}
+
+.hud-distance {
+  padding: 0 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  opacity: 0.65;
+}
+
+.hud-clock {
+  align-self: flex-start;
+  margin: 0.35rem 0 0 1.1rem;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.55);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+/* The last ten seconds are the only moment the exact number matters. */
+.hud-clock-low {
+  background: #e8663c;
+  animation: clock-pulse 1s ease-in-out infinite;
+}
+
+@keyframes clock-pulse {
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-clock-low {
+    animation: none;
+  }
+}
+
+.hud-multiplier {
+  align-self: flex-start;
+  margin: 0.4rem 0 0 1.1rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-shadow: none;
+}
+
+.hud-powerups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0 1.1rem;
+  align-items: flex-start;
+}
+
+.hud-powerup {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 8.5rem;
+  padding: 0.3rem 0.6rem 0.4rem;
+  border: 2px solid currentColor;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.82);
+  text-shadow: none;
+}
+
+/* Tinted to the power-up's own colour, matching its border and drain bar. */
+.hud-powerup-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.hud-powerup-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* Drains left to right as the power-up runs out. */
+.hud-powerup-drain {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  transform-origin: left center;
+}
+
+/* --- Home screen ------------------------------------------------------- */
+
+/*
+ * A full screen, not a card. The live scene runs behind it, so a scrim from
+ * both edges keeps the type readable over whatever happens to be on screen -
+ * a sunlit snowfield and a dark pine line are very different backdrops.
+ */
+.home {
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* Scrolls on short screens rather than pushing the board card off the
+     bottom - the home screen has to be fully reachable on a small phone. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* See `.panel-scroll`: the global touch-action would otherwise stop this
+     scrolling with a finger on a short screen. */
+  touch-action: pan-y;
+  padding: calc(var(--safe-top) + 0.75rem) 1.25rem calc(var(--safe-bottom) + 1rem);
+  color: #fff;
+  background:
+    linear-gradient(to bottom, rgba(9, 28, 48, 0.62) 0%, rgba(9, 28, 48, 0.12) 34%),
+    linear-gradient(to top, rgba(9, 28, 48, 0.78) 0%, rgba(9, 28, 48, 0.1) 40%);
+}
+
+.home-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-coins {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffd66b;
+}
+
+.home-coins::before {
+  content: '◕ ';
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 1.15rem;
+  font-family: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.home-title-block {
+  margin-top: auto;
+  text-align: center;
+}
+
+.home-title {
+  font-size: clamp(2.6rem, 13vw, 3.6rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-shadow: 0 0.15rem 1.4rem rgba(6, 22, 40, 0.7);
+}
+
+.home-tagline {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.home-records {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+  padding: 0.7rem 0.5rem;
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.26);
+  text-align: center;
+}
+
+.home-records dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  opacity: 0.65;
+}
+
+.home-records dd {
+  margin-top: 0.1rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-actions {
+  margin-top: auto;
+}
+
+/* --- Mode picker ------------------------------------------------------- */
+
+.mode-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.mode-chip {
+  flex: 1 1 auto;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mode-chip-on {
+  background: #fff;
+  color: var(--ink);
+}
+
+/* On a light panel the unselected chips need the inverse treatment. */
+.mode-picker-light {
+  margin: 0.8rem 0 0.2rem;
+}
+
+.mode-picker-light .mode-chip {
+  background: rgba(20, 45, 62, 0.08);
+  color: var(--ink);
+}
+
+.mode-picker-light .mode-chip-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.play-button {
+  width: 100%;
+  padding: 1.05rem 1.25rem;
+  border: none;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #4bbcf0 0%, var(--accent) 100%);
+  box-shadow: 0 0.6rem 1.4rem rgba(10, 60, 95, 0.45);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.play-button:active {
+  transform: translateY(2px);
+  filter: brightness(0.95);
+}
+
+.home-nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.nav-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.6rem 0.4rem;
+  border: none;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.nav-button:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.nav-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #ff7a4d;
+}
+
+/* Equipped-board summary, doubling as a shortcut into the shop. */
+.home-board {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'swatch text';
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: none;
+  border-radius: 0.95rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.home-board .board-preview {
+  grid-area: swatch;
+}
+
+/* Sits on a tinted tile so pale boards stay visible against any panel. */
+.board-preview {
+  flex: none;
+  display: block;
+  border-radius: 0.6rem;
+  background: rgba(150, 184, 214, 0.22);
+}
+
+.home-board-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-board-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.home-board-tagline {
+  font-size: 0.76rem;
+  opacity: 0.7;
+}
+
+/* --- Board stats ------------------------------------------------------- */
+
+.stat-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 3.9rem 1fr 2.6rem;
+  /* Declared in both modes. A `grid-area` naming an area the template does not
+     define falls back to auto-placement, which scatters the row. */
+  grid-template-areas: 'label bar delta';
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+}
+
+.stat-list:not(.stat-list-compact) .stat-row {
+  grid-template-areas: 'label bar delta' 'hint hint hint';
+  row-gap: 0.1rem;
+}
+
+.stat-label {
+  grid-area: label;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.stat-bar {
+  grid-area: bar;
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(127, 160, 190, 0.32);
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+}
+
+/* Neutral marker, so a bar reads as better or worse rather than just long. */
+.stat-bar-neutral {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.stat-delta {
+  grid-area: delta;
+  text-align: right;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-hint {
+  grid-area: hint;
+  font-size: 0.66rem;
+  opacity: 0.55;
+}
+
+/*
+ * Tone classes are scoped to the element they apply to. Left unscoped, the bar
+ * fill's background also lands on the delta label and turns it into a chip.
+ */
+.stat-bar-fill.stat-up {
+  background: #4bd07f;
+}
+
+.stat-bar-fill.stat-down {
+  background: #f0a24b;
+}
+
+.stat-bar-fill.stat-flat {
+  background: rgba(127, 160, 190, 0.7);
+}
+
+.stat-delta.stat-up {
+  color: #2f9e5c;
+}
+
+.stat-delta.stat-down {
+  color: #c47a23;
+}
+
+.stat-delta.stat-flat {
+  color: rgba(120, 145, 168, 0.95);
+}
+
+/* --- Menus and end-of-run panels -------------------------------------- */
+
+.panel {
+  /* Above the input surface: menu buttons must receive taps. */
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 1rem) 1.25rem calc(var(--safe-bottom) + 1rem);
+  background: rgba(20, 45, 62, 0.32);
+  backdrop-filter: blur(2px);
+}
+
+.panel-card {
+  width: min(24rem, 100%);
+  padding: 1.75rem 1.5rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1.5rem 3rem rgba(15, 40, 60, 0.25);
+  text-align: center;
+  color: var(--ink);
+}
+
+.panel-title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.panel-subtitle {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  opacity: 0.7;
+}
+
+.panel-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.panel-stats dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+.panel-stats dd {
+  margin-top: 0.15rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-button {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.9rem 1.25rem;
+  border: none;
+  border-radius: 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.panel-button:active {
+  transform: translateY(1px);
+  filter: brightness(0.94);
+}
+
+.panel-button-secondary {
+  position: relative;
+  margin-top: 0;
+  padding: 0.7rem 1rem;
+  background: rgba(20, 45, 62, 0.08);
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+/* Icon above the label, matching the home screen's navigation. */
+.panel-actions .panel-button-secondary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.55rem 0.9rem;
+  line-height: 1.15;
+}
+
+/* Small dot on the Daily button when a reward is waiting. */
+.panel-badge {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.55rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #e8663c;
+}
+
+.panel-best {
+  margin-top: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* Shop and missions are taller than the viewport on small phones. */
+.panel-scroll {
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Re-enables vertical panning, which `body { touch-action: none }` disables
+     for every descendant. Without this the panel has a scrollbar it will not
+     actually scroll with a finger, and the Back button at the bottom of a long
+     screen is unreachable on a small phone. */
+  touch-action: pan-y;
+}
+
+.panel-card-wide {
+  width: min(30rem, 100%);
+  text-align: left;
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panel-wallet {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #b8791a;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-section {
+  margin: 1.4rem 0 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+}
+
+.shop-list,
+.mission-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shop-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(20, 45, 62, 0.05);
+}
+
+.shop-swatch {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid;
+  border-radius: 0.4rem;
+}
+
+.shop-name {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.shop-level {
+  font-weight: 600;
+  opacity: 0.5;
+}
+
+.shop-button {
+  flex: none;
+  min-width: 4.5rem;
+  padding: 0.45rem 0.7rem;
+  border: none;
+  border-radius: 0.55rem;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.shop-button:disabled {
+  background: rgba(20, 45, 62, 0.16);
+  color: rgba(20, 45, 62, 0.45);
+  cursor: default;
+}
+
+.shop-tag {
+  flex: none;
+  min-width: 4.5rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+}
+
+.daily-reward {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.8rem;
+  background: linear-gradient(135deg, rgba(47, 168, 224, 0.16), rgba(240, 180, 41, 0.16));
+}
+
+.daily-streak {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.daily-hint {
+  font-size: 0.82rem;
+  opacity: 0.65;
+}
+
+.mission-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'text button'
+    'bar  button';
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(20, 45, 62, 0.05);
+}
+
+.mission-text {
+  grid-area: text;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.mission-description {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.mission-progress {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+
+.mission-row .shop-button,
+.mission-row .shop-tag {
+  grid-area: button;
+}
+
+.mission-bar {
+  grid-area: bar;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.12);
+  overflow: hidden;
+}
+
+.mission-bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--accent);
+}
+
+/* --- Scores, settings and shared panel bits ---------------------------- */
+
+.panel-note {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  opacity: 0.6;
+}
+
+.panel-empty {
+  margin: 1.5rem 0;
+  text-align: center;
+  font-size: 0.95rem;
+  opacity: 0.6;
+}
+
+.score-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(20, 45, 62, 0.05);
+}
+
+/* The top three are worth picking out; below that the rank number is enough. */
+.score-row:nth-child(-n + 3) {
+  background: rgba(47, 168, 224, 0.12);
+}
+
+.score-rank {
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-align: center;
+  opacity: 0.5;
+}
+
+.score-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.score-value {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-detail {
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.score-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.score-board {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.score-date {
+  font-size: 0.68rem;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(20, 45, 62, 0.05);
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.toggle-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.toggle-hint {
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
+/* --- Volume sliders ---------------------------------------------------- */
+
+.volume-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.6rem 0.7rem 0.75rem;
+  border-radius: 0.7rem;
+  background: rgba(20, 45, 62, 0.05);
+}
+
+.volume-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.volume-value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.volume-slider {
+  width: 100%;
+  margin-top: 0.55rem;
+  /* A slider is a horizontal drag, and the global `touch-action: none` would
+     otherwise leave the thumb unable to follow a finger. */
+  touch-action: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.16);
+}
+
+.volume-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.16);
+}
+
+/* Deliberately large: this is dragged with a thumb, not a mouse pointer. */
+.volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-top: calc((1.4rem - 6px) / -2);
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(10, 40, 65, 0.4);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(10, 40, 65, 0.4);
+}
+
+.switch {
+  flex: none;
+  width: 3rem;
+  height: 1.7rem;
+  padding: 0.18rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.2);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s ease;
+}
+
+.switch-on {
+  background: var(--accent);
+}
+
+.switch-knob {
+  display: block;
+  width: 1.34rem;
+  height: 1.34rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switch-on .switch-knob {
+  transform: translateX(1.3rem);
+}
+
+.help-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+
+.shop-row-board {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'swatch name action'
+    'stats  stats stats';
+  gap: 0.5rem 0.7rem;
+}
+
+.shop-row-board .board-preview {
+  grid-area: swatch;
+  align-self: start;
+}
+
+.shop-row-board .shop-name {
+  grid-area: name;
+  display: flex;
+  flex-direction: column;
+}
+
+.shop-row-board .shop-button,
+.shop-row-board .shop-tag {
+  grid-area: action;
+}
+
+.shop-row-board .stat-list {
+  grid-area: stats;
+}
+
+.shop-tagline {
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.6;
+}

@@ -1,0 +1,32 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+
+# Downloaded asset archives. The extracted GLBs in src/assets/models/ ARE
+# committed - they are the ones the build depends on. Licence texts are kept.
+assets-src/*.zip
+
+# Capacitor native projects ARE committed - they carry hand-edited config
+# (manifest, themes, icons) that `cap sync` does not regenerate. Capacitor
+# writes its own .gitignore inside each platform for the build outputs.
+# Only the copied web bundle is ignored, since `cap sync` rebuilds it.
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+ios/App/App/public/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local Claude Code settings (machine-specific permissions and launch config)
+.claude/settings.local.json

@@ -1,0 +1,192 @@
+/**
+ * App shell.
+ *
+ * The Canvas mounts once and stays mounted for the whole session, including
+ * behind every screen. Tearing down a WebGL context per screen is slow on
+ * mobile and leaks on some Android WebViews, so screens are DOM layers over a
+ * live scene rather than separate views.
+ *
+ * Routing is deliberately flat: the run phase decides whether the player is
+ * riding, and `screen` decides what they are looking at when they are not.
+ */
+
+import { Canvas } from '@react-three/fiber';
+import { useCallback, useEffect, useState } from 'react';
+import * as THREE from 'three';
+import { GameOver } from '@/app/GameOver';
+import { Home } from '@/app/Home';
+import { Hud } from '@/app/Hud';
+import { InputSurface } from '@/app/InputSurface';
+import { Missions } from '@/app/Missions';
+import { Paused } from '@/app/Paused';
+import type { Screen } from '@/app/screens';
+import { Scores } from '@/app/Scores';
+import { Settings } from '@/app/Settings';
+import { Shop } from '@/app/Shop';
+import { ATMOSPHERE, CANVAS_BACKGROUND } from '@/game/config/visuals';
+import { TUNING } from '@/game/config/tuning';
+import { allowsDoubleJump } from '@/game/content/powerUps';
+import { Scene } from '@/game/render/Scene';
+import { useGameStore } from '@/game/state/gameStore';
+import { useMetaStore } from '@/game/state/metaStore';
+import { runtime } from '@/game/state/runtime';
+import type { Gesture } from '@/game/systems/input';
+import { requestLaneChange } from '@/game/systems/lanes';
+import { requestJump, requestSlide } from '@/game/systems/player';
+import {
+  setMusicVolume,
+  setSfxVolume,
+  sfxJump,
+  sfxLaneChange,
+  sfxSlide,
+  unlockAudio,
+} from '@/platform/audio';
+import { hapticLight, hapticMedium, setHapticsEnabled } from '@/platform/haptics';
+import { setMusicEnabled, startMusic } from '@/platform/music';
+
+export function App() {
+  const phase = useGameStore((state) => state.phase);
+  const loadMeta = useMetaStore((state) => state.load);
+  const settings = useMetaStore((state) => state.save.settings);
+  const [screen, setScreen] = useState<Screen>('home');
+
+  // Reading the save is genuine external I/O, and it happens exactly once.
+  useEffect(() => {
+    void loadMeta();
+  }, [loadMeta]);
+
+  // Push the loaded preferences into the modules that own the hardware. A real
+  // external-system sync, which is what an effect is for.
+  useEffect(() => {
+    setSfxVolume(settings.sfxVolume);
+    setHapticsEnabled(settings.hapticsEnabled);
+    setMusicVolume(settings.musicVolume);
+    // Zero is off, and off means stopping the scheduler rather than leaving it
+    // queueing notes into a silent gain node forty times a second.
+    setMusicEnabled(settings.musicVolume > 0);
+  }, [settings.sfxVolume, settings.hapticsEnabled, settings.musicVolume]);
+
+  // Bring audio online from a touch anywhere, in the capture phase so a menu
+  // button cannot swallow it.
+  //
+  // This used to hang off the gameplay input surface, which sits *below* every
+  // screen - so tapping Play never unlocked anything and the score did not
+  // start until the player's first swipe mid-run. The menus were simply silent.
+  // A browser will only resume an AudioContext from inside a user gesture, so
+  // this has to be a real listener rather than something the render can do.
+  //
+  // Deliberately not a one-shot. If the first touch of a session fails to bring
+  // the context up - which an Android WebView will do, and which a mid-launch
+  // stray event can cause - a `once` listener has spent its only chance and the
+  // game stays silent for good. Both calls below are no-ops once they have
+  // taken effect, so retrying on every touch costs two boolean checks.
+  useEffect(() => {
+    const handleTouch = () => {
+      unlockAudio();
+      if (useMetaStore.getState().save.settings.musicVolume > 0) startMusic();
+    };
+    window.addEventListener('pointerdown', handleTouch, { capture: true });
+    return () => window.removeEventListener('pointerdown', handleTouch, { capture: true });
+  }, []);
+
+  const handleGesture = useCallback((gesture: Gesture) => {
+    // Touches are handled by the window-level unlock above; this covers the
+    // keyboard, which never produces a pointer event and would otherwise leave
+    // a desktop player who only uses the arrow keys in silence.
+    unlockAudio();
+    if (useMetaStore.getState().save.settings.musicVolume > 0) startMusic();
+
+    // Input is ignored outside a live run; the screens have their own buttons.
+    if (!runtime.running || !runtime.alive) return;
+
+    switch (gesture) {
+      case 'left':
+        if (requestLaneChange(runtime.lane, -1)) {
+          hapticLight();
+          sfxLaneChange();
+        }
+        break;
+      case 'right':
+        if (requestLaneChange(runtime.lane, 1)) {
+          hapticLight();
+          sfxLaneChange();
+        }
+        break;
+      case 'up':
+      case 'tap':
+        if (requestJump(runtime.player, allowsDoubleJump(runtime.powerUps))) {
+          hapticLight();
+          sfxJump();
+        }
+        break;
+      case 'down':
+        if (requestSlide(runtime.player)) {
+          hapticMedium();
+          sfxSlide();
+        }
+        break;
+      case 'none':
+        break;
+    }
+  }, []);
+
+  const goHome = useCallback(() => setScreen('home'), []);
+  const navigate = useCallback((next: Screen) => setScreen(next), []);
+
+  const riding = phase === 'running';
+  const paused = phase === 'paused';
+  const finished = phase === 'gameover';
+  // Home is the resting state: shown whenever the player is neither riding nor
+  // looking at a result, and no other screen has been opened.
+  const atHome = !riding && !paused && !finished && screen === 'home';
+
+  return (
+    <>
+      <Canvas
+        // Cap device pixel ratio: a 3x phone screen renders 9x the pixels for
+        // no visible gain on flat-shaded low-poly art.
+        dpr={[1, 2]}
+        // Tone mapping set here so the renderer is constructed with it, rather
+        // than mutated afterwards. Without a tone curve the lit snow clips to
+        // pure white and every highlight reads as the same flat value.
+        gl={{
+          antialias: false,
+          powerPreference: 'high-performance',
+          alpha: false,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: ATMOSPHERE.exposure,
+          outputColorSpace: THREE.SRGBColorSpace,
+        }}
+        // The far plane has to clear the sky dome and the furthest mountain
+        // range, or both are clipped away and the scene renders against the
+        // clear colour. Near is pulled out to 0.5 to claw back the depth
+        // precision that costs - nothing is ever closer than the player, and
+        // the player is at least seven units from the camera.
+        camera={{
+          position: [0, TUNING.camera.height, TUNING.camera.minDistance],
+          fov: TUNING.camera.fov,
+          near: 0.5,
+          far: 900,
+        }}
+        style={{ background: CANVAS_BACKGROUND }}
+      >
+        <Scene />
+      </Canvas>
+
+      {/* Grade and vignette, composited rather than rendered. */}
+      <div className="grade" aria-hidden="true" />
+
+      <InputSurface onGesture={handleGesture} />
+
+      {riding && <Hud />}
+      {paused && <Paused onHome={goHome} />}
+      {atHome && <Home onNavigate={navigate} />}
+      {finished && screen === 'home' && <GameOver onNavigate={navigate} onHome={goHome} />}
+
+      {screen === 'shop' && <Shop onClose={goHome} />}
+      {screen === 'missions' && <Missions onClose={goHome} />}
+      {screen === 'scores' && <Scores onClose={goHome} />}
+      {screen === 'settings' && <Settings onClose={goHome} />}
+    </>
+  );
+}

@@ -16,7 +16,13 @@ import { gameTimestep } from '@/game/core/gameTimestep';
 import { flushMetaSave, useMetaStore } from '@/game/state/metaStore';
 import { onAppStateChange } from '@/platform/appState';
 import { startMusic, stopMusic } from '@/platform/music';
-import { hideBootSplash, hideSplash, initNativeShell } from '@/platform/shell';
+import {
+  BOOT_STEPS,
+  hideBootSplash,
+  hideSplash,
+  initNativeShell,
+  setBootProgress,
+} from '@/platform/shell';
 
 export function PlatformBridge() {
   const setFrameloop = useThree((state) => state.setFrameloop);
@@ -24,6 +30,9 @@ export function PlatformBridge() {
 
   useEffect(() => {
     void initNativeShell();
+    // The renderer exists by the time this mounts, which is the last milestone
+    // before models finish loading and a frame can be drawn.
+    setBootProgress(BOOT_STEPS.scene);
   }, []);
 
   useEffect(
@@ -51,9 +60,11 @@ export function PlatformBridge() {
   useFrame(() => {
     if (splashHiddenRef.current) return;
     splashHiddenRef.current = true;
+    // Belt and braces: `handOverToPoster` has almost certainly already done
+    // this, but a native splash still up at the first frame would now be
+    // covering a running game.
     void hideSplash();
-    // The web poster goes at the same moment. On a phone it is behind the native
-    // splash and nobody ever sees it; in a browser it is the only one there is.
+    setBootProgress(BOOT_STEPS.ready);
     hideBootSplash();
   });
 

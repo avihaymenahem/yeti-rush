@@ -14,12 +14,17 @@ const config: CapacitorConfig = {
       // The app hides the splash itself once the first frame has rendered,
       // so the player never sees a blank canvas.
       launchAutoHide: false,
+      // Cross-fades the system splash into the boot poster the WebView is
+      // already showing underneath it. Both are the same night blue, so what
+      // the player sees is the launcher icon dissolving into the poster.
+      launchFadeOutDuration: 220,
       // Night sky at the top of the poster, not the daylight blue the WebView
       // sits on. Kept in step with SPLASH_BACKGROUND in game/config/visuals.ts.
       backgroundColor: '#051844',
-      // The poster is composed onto a 1:2 canvas by scripts/generate-splash.mjs
-      // precisely so this crop is harmless; handing over the raw 2:3 art would
-      // take a third of the width, which is most of the title.
+      // Only reached on the legacy path. The plugin routes every Android
+      // version through `installSplashScreen` first, which draws the system
+      // splash and ignores the drawable entirely - which is why the poster is
+      // shown by the WebView instead. See `handOverToPoster` in platform/shell.
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },

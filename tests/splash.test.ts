@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { SPLASH_BACKGROUND } from '@/game/config/visuals';
+import { BOOT_STEPS } from '@/platform/shell';
 
 const root = new URL('../', import.meta.url);
 const file = (path: string) => fileURLToPath(new URL(path, root));
@@ -136,6 +137,52 @@ describe('the colour behind the poster', () => {
     // would otherwise satisfy by making every colour in the project the same.
     const sky = /--sky:\s*(#[0-9a-f]{6})/.exec(read('src/index.css'));
     expect(sky?.[1]).not.toBe(SPLASH_BACKGROUND);
+  });
+});
+
+describe('the launch sequence', () => {
+  /*
+   * The poster is shown by the WebView, not by Android.
+   *
+   * This is the whole reason the boot screen is not merely a nicety on the web.
+   * `@capacitor/splash-screen` calls `installSplashScreen` on every version,
+   * which draws the *system* splash - the launcher icon on a flat colour - and
+   * never looks at `@drawable/splash`. The poster reached the phone only once
+   * the native splash started being handed over to the WebView's copy of it.
+   */
+  it('hands the native splash over to the poster', () => {
+    const shell = read('src/platform/shell.ts');
+    expect(shell).toContain('handOverToPoster');
+    expect(read('src/main.tsx')).toContain('handOverToPoster');
+  });
+
+  it('styles the poster without waiting for the bundle', () => {
+    // The stylesheet arrives *with* the bundle, which is the thing the poster
+    // exists to cover. Rules for it in index.css would apply only after the
+    // wait they are meant to look good during.
+    const html = read('index.html');
+    expect(html).toContain('#boot {');
+    expect(read('src/index.css')).not.toContain('#boot {');
+  });
+
+  it('moves the bar forward and never back', () => {
+    const steps = Object.values(BOOT_STEPS);
+    for (let i = 1; i < steps.length; i++) {
+      expect(steps[i] as number).toBeGreaterThan(steps[i - 1] as number);
+    }
+    expect(steps.at(-1)).toBe(1);
+  });
+
+  it('never fills the bar before a frame is on screen', () => {
+    // A bar that reaches the end while the app is still loading is worse than
+    // no bar: it turns "still working" into "stuck". Only the first rendered
+    // frame is allowed to complete it, and the creep in index.html is capped
+    // short of full for the same reason.
+    for (const [name, value] of Object.entries(BOOT_STEPS)) {
+      if (name !== 'ready') expect(value).toBeLessThan(1);
+    }
+    const creep = /Math\.min\(([0-9.]+), target \+/.exec(read('index.html'));
+    expect(Number(creep?.[1])).toBeLessThan(1);
   });
 });
 

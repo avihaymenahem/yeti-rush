@@ -60,43 +60,14 @@ canvas {
 }
 
 /*
- * Boot poster, above everything until the first frame is on screen.
+ * The boot poster's styles are NOT here. They are inline in index.html.
  *
- * The colour is painted by the element itself so the very first paint is
- * already the right one - the poster arrives a moment later and lands on the
- * same night sky it opens with, so there is no flash between them.
+ * That is deliberate and worth not undoing: this stylesheet arrives with the
+ * bundle, and the bundle is exactly what the boot poster exists to cover. Rules
+ * for it here would apply only after the wait they are meant to look good
+ * during, so the launch would show an unstyled full-size image on a white page
+ * and then snap into place.
  */
-#boot {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: var(--splash);
-  pointer-events: none;
-  transition: opacity 320ms ease-out;
-}
-
-#boot img {
-  width: 100%;
-  height: 100%;
-  /* The poster canvas is 1:2, near enough to a phone that filling the screen
-     costs only the outer tenth of the width. */
-  object-fit: cover;
-}
-
-/*
- * A landscape window is nothing like the poster's shape, so filling it would
- * blow up a narrow vertical strip. Show the whole poster on the night sky
- * instead - it is a desktop browser, where there is no launch splash to match.
- */
-@media (orientation: landscape) {
-  #boot img {
-    object-fit: contain;
-  }
-}
-
-.boot--gone {
-  opacity: 0;
-}
 
 /*
  * Colour grade and vignette.

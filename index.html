@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -6,17 +6,96 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#5ea3d4" />
+    <meta name="theme-color" content="#051844" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Yeti Rush</title>
+
+    <!--
+      Boot styles, inline and duplicated from index.css on purpose.
+
+      This is the launch screen, so it has to be styled on the *first* paint.
+      index.css arrives with the bundle, and the bundle is the thing being
+      waited for - so relying on it would show an unstyled full-size poster in
+      the corner of a white page for exactly as long as the splash is needed.
+      Everything here is what a browser needs before it has run any JavaScript.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #051844;
+        overflow: hidden;
+      }
+
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: #051844;
+        pointer-events: none;
+        transition: opacity 320ms ease-out;
+      }
+
+      #boot img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* The poster canvas is 1:2, near enough to a phone that filling the
+           screen costs only the outer tenth of the width. */
+        object-fit: cover;
+      }
+
+      /* A landscape window is nothing like the poster's shape, so filling it
+         would blow up a narrow vertical strip. Show the whole thing instead. */
+      @media (orientation: landscape) {
+        #boot img {
+          object-fit: contain;
+        }
+      }
+
+      .boot-bar {
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        /* Above the home indicator on a gesture-navigation phone. */
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 2.2rem);
+        height: 0.34rem;
+        overflow: hidden;
+        border-radius: 999px;
+        /* Dark, not light. The bar sits over the bottom of the poster, which is
+           pale snow - a white track is invisible exactly where it lands. This
+           reads against both the snow and the night sky above it. */
+        background: rgba(4, 20, 58, 0.38);
+      }
+
+      .boot-bar-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #8fd8ff, #ffd35c);
+        box-shadow: 0 0 8px rgba(255, 211, 92, 0.55);
+        transform: scaleX(0);
+        transform-origin: left center;
+      }
+
+      .boot--gone {
+        opacity: 0;
+      }
+    </style>
   </head>
   <body>
     <!--
-      Boot poster. Sits above #root until the first rendered frame, which is the
-      web half of what the native splash does on the phone: a WebGL game has a
-      bundle to fetch and a scene to build, and until both are done the page is
-      an empty coloured rectangle.
+      Boot poster. Sits above #root until the first rendered frame.
+
+      On the web this is the only splash there is. On the phone it is also the
+      only one that shows the poster: the Capacitor plugin routes every Android
+      version through `installSplashScreen`, which draws the *system* splash -
+      the launcher icon on a flat colour - and never touches the drawable. So
+      the native splash is handed over to this one as soon as the image below
+      has decoded, and this carries the rest of the wait.
 
       Written into the HTML rather than rendered by React on purpose. React is
       the thing being waited for, so a splash React owns cannot appear until it
@@ -25,18 +104,62 @@
       alongside the bundle instead of behind it.
     -->
     <div id="boot" aria-hidden="true">
-      <img src="/splash.webp" alt="" decoding="async" fetchpriority="high" />
+      <img id="boot-poster" src="/splash.webp" alt="" decoding="async" fetchpriority="high" />
+      <div class="boot-bar"><span class="boot-bar-fill" id="boot-bar"></span></div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Last resort. If the bundle throws or WebGL is unavailable the first
-      // frame never arrives, and a splash with no way out is a hung app - the
-      // one failure mode worse than the blank screen this replaces.
-      setTimeout(function () {
-        var boot = document.getElementById('boot');
-        if (boot) boot.classList.add('boot--gone');
-      }, 10000);
+      (function () {
+        /*
+         * The loading bar.
+         *
+         * Honest about being partly a guess, and it has to be: the two slowest
+         * things at launch are fetching a bundle and building a WebGL scene,
+         * and neither reports progress that can be read. So the bar eases
+         * towards a target that real milestones raise - `window.__yetiBoot` is
+         * called from `platform/shell.ts` as the bundle runs, the save loads
+         * and the scene mounts - and creeps slowly upward between them.
+         *
+         * The creep is capped short of the end. A bar that reaches 100% while
+         * the app is still loading is worse than no bar at all; one that is
+         * clearly still moving says "working" without claiming to know how much
+         * is left. Only the first rendered frame completes it.
+         *
+         * Lives here rather than in the bundle because it has to animate while
+         * the bundle is still being fetched, which is most of what it measures.
+         */
+        var fill = document.getElementById('boot-bar');
+        var shown = 0;
+        var target = 0.06;
+        var timer = setInterval(function () {
+          target = Math.min(0.92, target + 0.0035);
+          shown += (target - shown) * 0.16;
+          fill.style.transform = 'scaleX(' + shown.toFixed(4) + ')';
+        }, 50);
+
+        // Monotonic: a milestone can only ever move the bar forwards. A bar
+        // that goes backwards reads as something having gone wrong.
+        window.__yetiBoot = function (value) {
+          target = Math.max(target, Math.min(1, value));
+          if (target >= 1) {
+            clearInterval(timer);
+            fill.style.transform = 'scaleX(1)';
+          }
+        };
+
+        var poster = document.getElementById('boot-poster');
+        if (poster.complete) window.__yetiBoot(0.3);
+        else poster.addEventListener('load', function () { window.__yetiBoot(0.3); });
+
+        // Last resort. If the bundle throws or WebGL is unavailable the first
+        // frame never arrives, and a splash with no way out is a hung app - the
+        // one failure mode worse than the blank screen this replaces.
+        setTimeout(function () {
+          var boot = document.getElementById('boot');
+          if (boot) boot.classList.add('boot--gone');
+        }, 10000);
+      })();
     </script>
   </body>
 </html>

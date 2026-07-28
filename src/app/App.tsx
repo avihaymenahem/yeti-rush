@@ -44,6 +44,7 @@ import {
 } from '@/platform/audio';
 import { hapticLight, hapticMedium, setHapticsEnabled } from '@/platform/haptics';
 import { setMusicEnabled, startMusic } from '@/platform/music';
+import { BOOT_STEPS, setBootProgress } from '@/platform/shell';
 
 export function App() {
   const phase = useGameStore((state) => state.phase);
@@ -53,7 +54,7 @@ export function App() {
 
   // Reading the save is genuine external I/O, and it happens exactly once.
   useEffect(() => {
-    void loadMeta();
+    void loadMeta().then(() => setBootProgress(BOOT_STEPS.save));
   }, [loadMeta]);
 
   // Push the loaded preferences into the modules that own the hardware. A real

@@ -75,11 +75,20 @@ export const TUNING = {
      * second - the ramp is for escalation, not for getting up to a speed that
      * should have been the floor.
      */
-    start: 16,
+    start: 21,
     /** Speed the run tops out at. */
     max: 36,
-    /** Seconds of running to reach `max`. Shorter, so the build is felt. */
-    rampSeconds: 150,
+    /**
+     * Seconds of running to reach `max`.
+     *
+     * Shortened along with the raised floor. The opening is the part every
+     * player sees and most of them judge the game on, and starting at 16 spent
+     * the first half-minute below the speed the game is actually about. The
+     * ceiling is unchanged - this is about getting there sooner, not going
+     * faster - so nothing the solvability check validates has moved: it is
+     * proved at `max` against the fastest board, which is the same number.
+     */
+    rampSeconds: 115,
   },
 
   ramp: {
@@ -296,6 +305,21 @@ export const TUNING = {
     arcPeak: 1.2,
     /** Default metres between coins in a run. */
     spacing: 1.4,
+    /**
+     * Scales the length of *plain* coin runs, leaving ramp and rail lines alone.
+     *
+     * The track used to lay 44 coins every 100 m, which put the entire shop
+     * inside a day's play. The fix is not to strip coins off the greedy routes -
+     * a ramp flight or a rail grind that pays nothing is a risk with no reason -
+     * so the arcs traced by `rampFrom` and `railFrom` keep every coin. Their
+     * counts are derived from the flight path anyway, and shortening one would
+     * leave the back half of an arc bare.
+     *
+     * What thins out is the filler: the runs lying on open track that reward
+     * nothing but being there. That makes the routes worth more relative to
+     * everything else, which is the balance this always should have had.
+     */
+    plainRunScale: 0.65,
     /** Visual radius. */
     radius: 0.32,
     /** Spin speed in radians/second. */

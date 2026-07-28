@@ -10,7 +10,7 @@
  * cannot be run through never ships.
  */
 
-import { LANES, type LaneIndex } from '@/game/config/tuning';
+import { LANES, TUNING, type LaneIndex } from '@/game/config/tuning';
 import { obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import { rampArcHeight } from '@/game/systems/ramp';
 import { railHeightAt } from '@/game/systems/rail';
@@ -308,7 +308,16 @@ export const CHUNKS: ChunkTemplate[] = [
     id: 'chalet-hop',
     tier: 1,
     weight: 8,
-    obstacles: [{ kind: 'chalet', lane: 1, z: 15 }],
+    // The log is what makes the ramp a decision. With the house alone, sliding
+    // one lane sideways answered the whole chunk and the coins over the roof
+    // were a gift for nothing. Now going around costs a jump or a second lane
+    // change, and the flight is the clean line - which is what a greedy route
+    // is supposed to be. One lane is always left open, so this is a cost, not a
+    // wall, and the solvability check still never has to know the ramp exists.
+    obstacles: [
+      { kind: 'chalet', lane: 1, z: 15 },
+      { kind: 'log', lane: 0, z: 15 },
+    ],
     ramps: [{ lane: 1, z: 4 }],
     coins: [{ lane: 1, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
   },
@@ -316,7 +325,10 @@ export const CHUNKS: ChunkTemplate[] = [
     id: 'chalet-hop-left',
     tier: 1,
     weight: 8,
-    obstacles: [{ kind: 'chalet', lane: 0, z: 15 }],
+    obstacles: [
+      { kind: 'chalet', lane: 0, z: 15 },
+      { kind: 'log', lane: 1, z: 15 },
+    ],
     ramps: [{ lane: 0, z: 4 }],
     coins: [{ lane: 0, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
   },
@@ -324,7 +336,10 @@ export const CHUNKS: ChunkTemplate[] = [
     id: 'chalet-hop-right',
     tier: 1,
     weight: 8,
-    obstacles: [{ kind: 'chalet', lane: 2, z: 15 }],
+    obstacles: [
+      { kind: 'chalet', lane: 2, z: 15 },
+      { kind: 'log', lane: 1, z: 15 },
+    ],
     ramps: [{ lane: 2, z: 4 }],
     coins: [{ lane: 2, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
   },
@@ -713,7 +728,15 @@ export function expandCoins(
 
   for (const run of chunk.coins) {
     const spacing = run.spacing ?? defaultSpacing;
-    for (let i = 0; i < run.count; i++) {
+    // A run tracing a ramp arc or a rail keeps every coin: its count is derived
+    // from the flight path, so trimming one leaves the back half of the route
+    // unrewarded. Only the filler on open track is thinned.
+    const onRoute = run.rampFrom !== undefined || run.railFrom !== undefined;
+    const count = onRoute
+      ? run.count
+      : Math.max(1, Math.round(run.count * TUNING.coins.plainRunScale));
+
+    for (let i = 0; i < count; i++) {
       const localZ = run.z + i * spacing;
 
       let y: number;
@@ -726,7 +749,7 @@ export function expandCoins(
         y = baseHeight + rampArcHeight(localZ - run.rampFrom);
       } else if (run.arc) {
         // A single-coin run has no arc to trace, so it sits at base height.
-        const t = run.count > 1 ? i / (run.count - 1) : 0;
+        const t = count > 1 ? i / (count - 1) : 0;
         y = baseHeight + arcPeak * Math.sin(Math.PI * t);
       } else {
         y = baseHeight;

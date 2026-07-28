@@ -54,7 +54,7 @@ export function nextStreak(lastClaim: string | null, today: string, currentStrea
 /** Coins awarded for a login streak, escalating then flattening out. */
 export function dailyRewardFor(streak: number): number {
   const clamped = Math.max(1, Math.min(7, Math.floor(streak)));
-  return clamped * 50;
+  return clamped * 150;
 }
 
 /** Whether the mission set needs re-rolling for a new day. */

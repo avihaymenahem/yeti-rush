@@ -26,6 +26,13 @@ function controlledRuntime(): RuntimeState {
   rt.running = true;
   for (const obstacle of rt.track.obstacles) obstacle.active = false;
   for (const coin of rt.track.coins) coin.active = false;
+  // Power-up pickups are laid on their own distance schedule rather than with
+  // chunks, so stopping the chunk stream does not stop them. Left running, a
+  // test that places one pickup and waits can quietly collect a *generated*
+  // one and see its timer refresh - which is exactly what started happening
+  // when the opening speed went up and the same wait covered more ground.
+  for (const pickup of rt.track.pickups) pickup.active = false;
+  rt.track.nextPickupAt = Number.MAX_SAFE_INTEGER;
   rt.track.nextChunkStart = Number.MAX_SAFE_INTEGER;
   return rt;
 }

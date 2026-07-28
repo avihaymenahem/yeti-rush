@@ -473,3 +473,198 @@ export function propGeometry(kind: PropKind): THREE.BufferGeometry {
 export function isPropKind(kind: string): kind is PropKind {
   return kind in PROP_BUILDERS;
 }
+
+// --- Power-up pickups --------------------------------------------------------
+// Each is built to its *label*, not to an abstract icon. These used to be five
+// identical octahedra distinguished only by tint, which asks the player to have
+// memorised a colour key - and colour is the first thing a low sun and heavy fog
+// take away. A silhouette survives both, and reads at the distance a decision
+// actually has to be made from.
+//
+// Sized to roughly the octahedron they replace, so the pickup radius in
+// `simulation.ts` still matches what is drawn.
+
+const PICKUP_COLORS = {
+  mug: '#f7f2ea',
+  cocoa: '#5a2f16',
+  cream: '#fffdf7',
+  boardDeck: '#5ec8f2',
+  boardEdge: '#f7fbfe',
+  binding: '#2c3e50',
+  chairFrame: '#c9862a',
+  chairSeat: '#f0b429',
+  cable: '#8a949e',
+  wing: '#efe4ff',
+  wingCore: '#d7b3ff',
+  star: '#5be584',
+  starCore: '#e9fff2',
+} as const;
+
+/** Hot Cocoa: a steaming mug, handle out to the side so it reads in profile. */
+function buildCocoa(): THREE.BufferGeometry {
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.CylinderGeometry(0.3, 0.26, 0.42, 10),
+      color: PICKUP_COLORS.mug,
+      position: [0, 0, 0],
+    },
+    // The drink itself, sitting just below the rim.
+    {
+      geometry: new THREE.CylinderGeometry(0.26, 0.26, 0.04, 10),
+      color: PICKUP_COLORS.cocoa,
+      position: [0, 0.2, 0],
+    },
+    // A marshmallow, because the dark disc alone reads as an empty tin.
+    {
+      geometry: new THREE.CylinderGeometry(0.08, 0.08, 0.07, 6),
+      color: PICKUP_COLORS.cream,
+      position: [0.08, 0.24, 0.04],
+    },
+    {
+      geometry: new THREE.TorusGeometry(0.13, 0.045, 5, 8, Math.PI * 1.2),
+      color: PICKUP_COLORS.mug,
+      position: [0.34, 0.02, 0],
+      rotation: [0, Math.PI / 2, -Math.PI / 2],
+    },
+  ];
+  return assemble(pieces);
+}
+
+/** Avalanche Board: a snowboard stood on end, bindings towards the camera. */
+function buildAvalanche(): THREE.BufferGeometry {
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.BoxGeometry(0.32, 0.86, 0.07),
+      color: PICKUP_COLORS.boardDeck,
+      position: [0, 0, 0],
+    },
+    // Pale tip and tail, the marking every board in the game shares.
+    {
+      geometry: new THREE.BoxGeometry(0.33, 0.12, 0.075),
+      color: PICKUP_COLORS.boardEdge,
+      position: [0, 0.38, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.33, 0.12, 0.075),
+      color: PICKUP_COLORS.boardEdge,
+      position: [0, -0.38, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.24, 0.09, 0.06),
+      color: PICKUP_COLORS.binding,
+      position: [0, 0.12, 0.06],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.24, 0.09, 0.06),
+      color: PICKUP_COLORS.binding,
+      position: [0, -0.12, 0.06],
+    },
+  ];
+  return assemble(pieces);
+}
+
+/** Chairlift: a seat hanging off a hanger, with a stub of cable above it. */
+function buildChairlift(): THREE.BufferGeometry {
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.BoxGeometry(0.62, 0.035, 0.035),
+      color: PICKUP_COLORS.cable,
+      position: [0, 0.42, 0],
+    },
+    // The hanger arm, which is what makes it a chairlift and not a bench.
+    {
+      geometry: new THREE.BoxGeometry(0.05, 0.34, 0.05),
+      color: PICKUP_COLORS.chairFrame,
+      position: [0, 0.25, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.5, 0.07, 0.34),
+      color: PICKUP_COLORS.chairSeat,
+      position: [0, 0.04, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.5, 0.3, 0.06),
+      color: PICKUP_COLORS.chairSeat,
+      position: [0, 0.18, -0.14],
+    },
+    // A safety bar across the front, the detail that sells the read at a glance.
+    {
+      geometry: new THREE.BoxGeometry(0.46, 0.04, 0.04),
+      color: PICKUP_COLORS.chairFrame,
+      position: [0, 0.2, 0.16],
+    },
+  ];
+  return assemble(pieces);
+}
+
+/** Snow Angel: a pair of wings - the double jump, drawn as the thing that flies. */
+function buildSnowAngel(): THREE.BufferGeometry {
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.CylinderGeometry(0.07, 0.05, 0.36, 6),
+      color: PICKUP_COLORS.wingCore,
+      position: [0, 0, 0],
+    },
+  ];
+
+  // Three feathers a side, swept back and fanning down, mirrored exactly.
+  for (const side of [-1, 1] as const) {
+    for (let i = 0; i < 3; i++) {
+      const t = i / 2;
+      pieces.push({
+        geometry: new THREE.BoxGeometry(0.34 - t * 0.08, 0.1, 0.05),
+        color: i === 0 ? PICKUP_COLORS.wing : PICKUP_COLORS.wingCore,
+        position: [side * (0.22 + t * 0.06), 0.12 - t * 0.16, -t * 0.03],
+        rotation: [0, 0, side * (0.35 - t * 0.5)],
+      });
+    }
+  }
+
+  return assemble(pieces);
+}
+
+/** Double Score: a star, the one shape that has meant "points" since arcades. */
+function buildDoubleScore(): THREE.BufferGeometry {
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.CylinderGeometry(0.16, 0.16, 0.14, 8),
+      color: PICKUP_COLORS.starCore,
+      rotation: [Math.PI / 2, 0, 0],
+      position: [0, 0, 0],
+    },
+  ];
+
+  // Five points radiating from the hub. Tapered prisms rather than a flat
+  // extruded star: flat shading needs faces at different angles to read at all.
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    pieces.push({
+      geometry: new THREE.ConeGeometry(0.13, 0.34, 4),
+      color: PICKUP_COLORS.star,
+      position: [Math.sin(angle) * 0.24, Math.cos(angle) * 0.24, 0],
+      rotation: [Math.PI / 2, 0, -angle],
+    });
+  }
+
+  return assemble(pieces);
+}
+
+const PICKUP_BUILDERS = {
+  magnet: buildCocoa,
+  avalanche: buildAvalanche,
+  chairlift: buildChairlift,
+  snowAngel: buildSnowAngel,
+  doubleScore: buildDoubleScore,
+} as const;
+
+const pickupCache = new Map<string, THREE.BufferGeometry>();
+
+/** Built once and shared: a pickup's geometry never changes. */
+export function pickupGeometry(id: keyof typeof PICKUP_BUILDERS): THREE.BufferGeometry {
+  let geometry = pickupCache.get(id);
+  if (!geometry) {
+    geometry = PICKUP_BUILDERS[id]();
+    pickupCache.set(id, geometry);
+  }
+  return geometry;
+}

@@ -23,7 +23,7 @@ import { useModel, type ModelSpec } from '@/game/render/useModel';
 import { runtime } from '@/game/state/runtime';
 import { laneToX } from '@/game/systems/lanes';
 import { MAX_OBSTACLES, worldZOf } from '@/game/systems/spawner';
-import { GLOSS } from '@/game/config/visuals';
+import { GLOSS, saturate } from '@/game/config/visuals';
 
 const scratch = new THREE.Object3D();
 
@@ -119,7 +119,7 @@ function BoxObstacleLayer({ kind }: { kind: ObstacleKind }) {
       frustumCulled={false}
     >
       <boxGeometry args={[def.visual.width, def.visual.height, def.visual.depth]} />
-      <meshPhongMaterial color={def.color} flatShading specular={GLOSS.prop.specular} shininess={GLOSS.prop.shininess} />
+      <meshPhongMaterial color={saturate(def.color)} flatShading specular={GLOSS.prop.specular} shininess={GLOSS.prop.shininess} />
     </instancedMesh>
   );
 }

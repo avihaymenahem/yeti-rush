@@ -16,6 +16,57 @@
  * so the grade never crushes contrast between an obstacle and the snow.
  */
 
+/**
+ * How much more saturated everything but the sky is drawn.
+ *
+ * A single place, applied at the point colours become geometry, rather than a
+ * hundred hand-picked hex values drifting apart over time.
+ *
+ * The sky is exempt on purpose and it is the one exemption that matters. It
+ * already carries the widest hue journey in the scene - deep blue overhead to a
+ * hot horizon - and it fills most of the frame; pushing it further turns a
+ * gradient into a poster. Everything *in* the world is the opposite case: flat
+ * shading gives geometry no surface detail, so hue and chroma are all it has to
+ * separate one thing from another, and a pale palette leaves the slope reading
+ * as one sheet of off-white whatever the lighting does.
+ *
+ * Fog is exempt with the sky. It is the atmosphere the world dissolves into and
+ * has to agree with what is behind it, or the horizon acquires a seam.
+ */
+export const SATURATION = 1.35;
+
+/**
+ * Pushes a hex colour's chroma by {@link SATURATION}, leaving hue and lightness
+ * alone.
+ *
+ * Chroma only, deliberately. Lifting lightness would flatten the value contrast
+ * the whole art direction rests on, and shifting hue would break the warm-key
+ * against cool-shadow split that gives flat-shaded facets their form. A pure
+ * saturation push makes the existing palette more itself rather than a new one.
+ *
+ * A grey stays grey: with no chroma to scale there is nothing to push, which is
+ * what keeps snow white and steel neutral instead of turning them lilac.
+ */
+export function saturate(hex: string, amount: number = SATURATION): string {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16) / 255;
+  const g = parseInt(value.slice(2, 4), 16) / 255;
+  const b = parseInt(value.slice(4, 6), 16) / 255;
+
+  // Scale each channel away from its own luminance. Equivalent to raising HSL
+  // saturation, without the round trip through hue - and it degrades gracefully
+  // on near-greys, where a hue is meaningless anyway.
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const push = (channel: number): string => {
+    const lifted = Math.max(0, Math.min(1, luma + (channel - luma) * amount));
+    return Math.round(lifted * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+
+  return `#${push(r)}${push(g)}${push(b)}`;
+}
+
 export const PALETTE = {
   /**
    * Sky, top to bottom.
@@ -40,8 +91,8 @@ export const PALETTE = {
    * a face turning away from the sun has to change *colour*, not just get
    * darker, or the whole slope reads as one undifferentiated sheet.
    */
-  snowLit: '#fdf3e4',
-  snowShadow: '#5f93c9',
+  snowLit: saturate('#fdf3e4'),
+  snowShadow: saturate('#5f93c9'),
 
   /**
    * The groomed run, deliberately a good few steps down from the surrounding
@@ -49,13 +100,13 @@ export const PALETTE = {
    * drifts, the ice wall - is near-white, and on a near-white piste none of it
    * has a silhouette. A mid-tone run is what gives them one.
    */
-  piste: '#aecce9',
-  pisteLine: '#7fb0dd',
+  piste: saturate('#aecce9'),
+  pisteLine: saturate('#7fb0dd'),
 
   /** Distant ranges, furthest first. Cooler and paler with distance. */
-  mountainFar: '#8fb6d8',
-  mountainMid: '#6f9ac4',
-  mountainNear: '#5480b0',
+  mountainFar: saturate('#8fb6d8'),
+  mountainMid: saturate('#6f9ac4'),
+  mountainNear: saturate('#5480b0'),
 
   /** Atmospheric haze the world fades into. Sits between mid sky and horizon. */
   fog: '#a8cbe4',

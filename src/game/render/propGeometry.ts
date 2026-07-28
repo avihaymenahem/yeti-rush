@@ -367,24 +367,29 @@ function buildRamp(): THREE.BufferGeometry {
  * ramp legible from a distance.
  */
 /**
- * A grind rail: a level steel bar on posts, built **one metre long**.
+ * The bar of a grind rail, built **one metre long** and scaled to fit.
  *
- * Unit length on purpose. Rails carry an authored length, so the renderer scales
- * this along Z rather than the geometry being rebuilt per size - one instanced
- * mesh still draws every rail in the world however many different lengths are on
- * screen. Everything that must not stretch with it - post thickness, the collar
- * at the near end - is therefore built as a separate short piece placed at the
- * ends, where scaling distorts it least.
+ * Unit length on purpose: rails roll their own length, so the renderer stretches
+ * this along Z rather than rebuilding geometry per size, and every rail in the
+ * world stays a single instanced draw.
  *
- * The bar runs along -z from the origin, matching how rails are placed.
+ * Only what is *uniform* along the rail may live here. That is the whole rule,
+ * and getting it wrong is not subtle: the first version put the posts in this
+ * geometry, and stretching it twenty times over turned two thirteen-centimetre
+ * posts into two-and-a-half-metre slabs. The result read as a long dark wall
+ * down the lane rather than a bar you could ollie onto - a comment claiming the
+ * posts were "placed at the ends, where scaling distorts them least" was simply
+ * wrong, because a scale applies everywhere.
+ *
+ * Anything that must keep its proportions goes in `buildRailPost` and is drawn
+ * unscaled at each end.
  */
-function buildRail(): THREE.BufferGeometry {
+function buildRailBar(): THREE.BufferGeometry {
   const { height } = TUNING.rail;
 
-  const pieces: Piece[] = [
-    // The bar itself, spanning the unit length. Wide enough to read at
-    // distance: a scale-accurate handrail is a single pixel by the time you
-    // need to decide whether to go for it.
+  return assemble([
+    // Wide enough to read at distance: a scale-accurate handrail is a single
+    // pixel by the time you need to decide whether to go for it.
     {
       geometry: new THREE.BoxGeometry(0.46, 0.18, 1),
       color: COLORS.railSteel,
@@ -397,35 +402,45 @@ function buildRail(): THREE.BufferGeometry {
       color: COLORS.railShine,
       position: [0, height + 0.11, -0.5],
     },
-  ];
+  ]);
+}
 
-  // Posts at both ends. Two only: at unit length these scale with the rail, and
-  // a row of them would smear into a fence on a long one.
-  for (const end of [-0.06, -0.94] as const) {
-    pieces.push({
+/**
+ * One end support of a rail: a post to the snow and a warm collar at the top.
+ *
+ * Drawn unscaled at both ends, so its proportions survive whatever length the
+ * bar rolled. The collar is what marks where a rail begins - the same job the
+ * ramp's chevrons do - and it would be a smear if it were stretched.
+ */
+function buildRailPost(): THREE.BufferGeometry {
+  const { height } = TUNING.rail;
+
+  return assemble([
+    {
       geometry: new THREE.BoxGeometry(0.13, height, 0.13),
       color: COLORS.railPost,
-      position: [0, height / 2, end],
-    });
-  }
-
-  // A warm collar at the near end - the mark that says "this is where it
-  // starts", the same job the ramp's chevrons do.
-  pieces.push({
-    geometry: new THREE.BoxGeometry(0.56, 0.26, 0.06),
-    color: COLORS.rampMark,
-    position: [0, height, -0.02],
-  });
-
-  return assemble(pieces);
+      position: [0, height / 2, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(0.5, 0.2, 0.16),
+      color: COLORS.rampMark,
+      position: [0, height, 0],
+    },
+  ]);
 }
 
 let railCache: THREE.BufferGeometry | null = null;
+let railPostCache: THREE.BufferGeometry | null = null;
 let rampCache: THREE.BufferGeometry | null = null;
 
 export function railGeometry(): THREE.BufferGeometry {
-  railCache ??= buildRail();
+  railCache ??= buildRailBar();
   return railCache;
+}
+
+export function railPostGeometry(): THREE.BufferGeometry {
+  railPostCache ??= buildRailPost();
+  return railPostCache;
 }
 
 export function rampGeometry(): THREE.BufferGeometry {

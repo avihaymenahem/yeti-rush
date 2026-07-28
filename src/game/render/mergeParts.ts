@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GLOSS } from '@/game/config/visuals';
+import { GLOSS, saturate } from '@/game/config/visuals';
 
 export interface Piece {
   geometry: THREE.BufferGeometry;
@@ -24,7 +24,12 @@ export interface Piece {
 }
 
 export function bakeColor(geometry: THREE.BufferGeometry, color: string): void {
-  const rgb = new THREE.Color(color);
+  // Saturated here, at the one point every merged prop, the yeti, the coins,
+  // the rails and the tunnels all pass through. Pushing chroma at the source
+  // instead of hand-editing a hundred hex values is what stops the palette
+  // drifting apart the first time one of them is retuned - and it leaves the
+  // sky, which is drawn by its own shader, untouched.
+  const rgb = new THREE.Color(saturate(color));
   const count = geometry.getAttribute('position').count;
   const colors = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {

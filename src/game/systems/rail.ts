@@ -3,71 +3,53 @@
  *
  * The single source of truth for the shape of a rail, shared by the player
  * physics (which rides it), the coin authoring (which decorates it), the
- * renderer (which draws it) and the tests. If any of those computed the slope
- * themselves the coins would drift off the rail the first time it was retuned.
+ * renderer (which draws it) and the tests.
  *
- * Parameterised by *distance along the rail*, never by time - exactly like the
- * ramp arc, and for the same reason. A rail defined in seconds would carry the
- * player to a different height at 16 u/s than at 36, so a rail authored to clear
- * a boulder would stop clearing it as the run sped up.
+ * A rail is a **level** steel bar running down the track, at a fixed height off
+ * the snow, and it is mounted by *jumping onto it* - a skate rail, not a ramp.
+ * The first version rose from ankle height to nearly four metres and was ridden
+ * onto at the low end, which made it a lift dressed up as a rail: it carried the
+ * player over things rather than asking anything of them, and the one input
+ * everybody tries at a rail - ollie onto it - was not how you got on.
+ *
+ * Because it is level, height is a constant rather than a function of distance,
+ * and the speed-invariance the sloped version needed so carefully is free.
  */
 
 import { TUNING } from '@/game/config/tuning';
 
 /**
- * Height of the rail `distanceAlong` metres from its near end.
+ * Height of the bar above the snow.
  *
- * A straight line, because a rail is a straight steel bar. Clamped at both ends
- * so a caller that overshoots gets the end height rather than an extrapolation
- * off into the sky.
+ * Takes an argument only so callers read the same way they did when this varied
+ * along the rail's length, and so a test can ask about a hypothetical rail.
  */
-export function railHeightAt(
-  distanceAlong: number,
-  length: number = TUNING.rail.length,
-  baseHeight: number = TUNING.rail.baseHeight,
-  rise: number = TUNING.rail.rise,
-): number {
-  if (distanceAlong <= 0) return baseHeight;
-  if (distanceAlong >= length) return baseHeight + rise;
-  return baseHeight + rise * (distanceAlong / length);
-}
-
-/** Height at the far end - where the player is released. */
-export function railTopHeight(
-  baseHeight: number = TUNING.rail.baseHeight,
-  rise: number = TUNING.rail.rise,
-): number {
-  return baseHeight + rise;
+export function railHeight(height: number = TUNING.rail.height): number {
+  return height;
 }
 
 /**
- * The height an obstacle must be under for a rider on the rail to clear it,
- * `distanceAlong` metres in.
+ * The height an obstacle must be under for a grinding player to clear it.
  *
- * Exists so tests can assert what a rail actually gets you over rather than
- * asserting a number someone typed in.
+ * Exists so tests assert what a rail actually gets you over rather than a number
+ * someone typed in. A level rail clears very little - which is the point. It is
+ * a route worth taking for what it pays, not for what it rescues you from.
  */
-export function railClearanceAt(distanceAlong: number): number {
-  return railHeightAt(distanceAlong);
+export function railClearance(): number {
+  return railHeight();
 }
 
 /**
- * Seconds between being thrown off the end of a rail and touching down.
+ * Seconds between leaving the end of a rail and touching down.
  *
- * The exit is a real ballistic fall from the top of the rail, and unlike the
- * ramp arc it is defined in *time*, so the ground it covers grows with speed.
- * That is exactly why the landing has to be protected by distance computed at
- * the fastest the game can go rather than by a constant someone eyeballed.
+ * A plain fall from the bar: no pop, because the exit is a dismount rather than
+ * a launch. Defined in *time*, so the ground it covers grows with speed - which
+ * is why the landing has to be protected by a distance computed at the fastest
+ * the game can go rather than by a constant someone eyeballed.
  */
 export function railExitAirTime(): number {
   const { gravity, fallGravityMultiplier } = TUNING.player;
-  const launch = TUNING.rail.exitVelocity;
-
-  // Rises against normal gravity, falls against the heavier fall gravity.
-  const riseTime = launch / gravity;
-  const apex = railTopHeight() + (launch * launch) / (2 * gravity);
-  const fallTime = Math.sqrt((2 * apex) / (gravity * fallGravityMultiplier));
-  return riseTime + fallTime;
+  return Math.sqrt((2 * railHeight()) / (gravity * fallGravityMultiplier));
 }
 
 /**

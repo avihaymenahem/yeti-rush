@@ -10,7 +10,7 @@
 import { TUNING } from '@/game/config/tuning';
 import type { Aabb } from '@/game/systems/collision';
 import { rampGravity, rampLaunchVelocity } from '@/game/systems/ramp';
-import { railHeightAt, railTopHeight } from '@/game/systems/rail';
+import { railHeight } from '@/game/systems/rail';
 
 export type PlayerMotion = 'running' | 'airborne' | 'sliding' | 'flying' | 'grinding';
 
@@ -206,25 +206,16 @@ export function launchFromRamp(player: PlayerState, speed: number): boolean {
 /**
  * Puts the player onto a rail, `distanceAlong` metres from its near end.
  *
- * Mounting takes *intent* - a jump or a slide - and then only needs the player's
- * feet to be where the bar is. There is no input to get right:
+ * Only from the air. That is the whole input for the mechanic and the thing
+ * that makes it a grind rather than a lift: you ollie onto the bar. A player on
+ * the snow does not step onto it - they ride into it, which is a crash, handled
+ * in `simulation.ts`.
  *
- *  - on the snow, riding into the near end steps you onto it, because that is
- *    what happens when you ride into a bar at ankle height;
- *  - in the air, the bar catches you wherever your arc crosses it, which is how
- *    every game that has ever had a grind rail behaves.
- *
- * Past the near end the bar is overhead and a grounded player runs underneath
- * untouched - that, not an input requirement, is what keeps the track beneath a
- * rail passable on its own terms and rails out of the solvability guarantee.
- *
- * Mounting used to demand a deliberate slide, on the reasoning that a rail
- * should be answered rather than stumbled onto. Two separate reports killed
- * that idea. A jump - the instinct - silently failed and dropped the player
- * onto the obstacle the rail exists to carry them over. And going at it in a
- * straight line, the first thing anyone tries with a solid object, passed
- * clean through it. A route the obvious inputs cannot take is not an optional
- * route; it is a bug with a design rationale attached.
+ * Catching is decided by geometry alone, never by what was pressed: feet within
+ * `catchHeight` of the bar, anywhere along its length. A rail whose mount had to
+ * be timed to a particular instant cost three rounds of "rails don't work", and
+ * the rule that came out of it is that arriving at the bar in the right place is
+ * the whole requirement.
  */
 export function mountRail(
   player: PlayerState,
@@ -232,20 +223,13 @@ export function mountRail(
   lane: number,
   distanceAlong: number,
 ): boolean {
-  // Already on it, or above it on a lift. A ramp flight is committed to its own
-  // arc and must not be plucked out of the air mid-chalet.
-  if (player.motion === 'grinding' || player.motion === 'flying') return false;
-  if (player.ramping) return false;
+  // Already on it, above it on a lift, or committed to a ramp arc that must not
+  // be interrupted mid-chalet.
+  if (player.motion !== 'airborne' || player.ramping) return false;
+  void distanceAlong;
 
-  const barHeight = railHeightAt(distanceAlong);
-
-  if (isGrounded(player)) {
-    // Stepping up onto it from the snow, so what matters is how high the bar
-    // has climbed - not how near it is, which is trivially zero on the ground.
-    if (barHeight > TUNING.rail.stepUpHeight) return false;
-  } else if (Math.abs(player.y - barHeight) > TUNING.rail.catchHeight) {
-    return false;
-  }
+  const bar = railHeight();
+  if (Math.abs(player.y - bar) > TUNING.rail.catchHeight) return false;
 
   player.motion = 'grinding';
   player.grindFromZ = railTrackZ;
@@ -253,35 +237,34 @@ export function mountRail(
   player.slideTimer = 0;
   player.slideQueued = false;
   player.jumpBuffer = 0;
-  player.ramping = false;
   player.rampGravity = 0;
   player.vy = 0;
-  player.y = barHeight;
+  player.y = bar;
   return true;
 }
 
 /**
- * Throws the player off the end of a rail.
+ * Drops the player off the end of a rail.
  *
- * A small upward pop rather than a plain drop, so the exit reads as being
- * launched off the end instead of the rail simply ceasing to exist. The double
- * jump is refreshed here, exactly as it is on landing - a rail exit is the
- * moment a Snow Angel is most worth having.
+ * A plain dismount with no upward pop. The sloped rail threw the player off its
+ * high end, which meant a long committed fall the generator had to reserve
+ * protected track for; from a level bar it is a short step down. The double jump
+ * is refreshed here exactly as it is on landing.
  */
 export function releaseRail(player: PlayerState): void {
   if (player.motion !== 'grinding') return;
   player.motion = 'airborne';
-  player.vy = TUNING.rail.exitVelocity;
+  player.vy = 0;
   player.grindLane = -1;
   player.doubleJumpUsed = false;
 }
 
 /**
- * Drops the player off a rail without the exit pop - they steered off it.
+ * Drops the player off a rail without finishing it - they steered off.
  *
- * Deliberately not a death. Falling off a rail costs the height, the coins
- * above it and whatever the rail was carrying you over; that is punishment
- * enough for a route nobody was obliged to take.
+ * Deliberately not a death. Falling off costs the coins still on the bar and
+ * whatever score the grind was building, which is punishment enough for a route
+ * nobody was obliged to take.
  */
 export function bailRail(player: PlayerState): void {
   if (player.motion !== 'grinding') return;
@@ -293,20 +276,23 @@ export function bailRail(player: PlayerState): void {
 /**
  * Rides the rail, given how far along it the player now is.
  *
- * Driven by distance rather than by `dt`, so the rail lifts to the same height
- * whatever the run speed - the same reasoning as the ramp arc. Returns false
- * once the player has run out of rail, having released them.
+ * Returns false once the rail has run out, having released them. Driven by
+ * distance rather than `dt` so the length authored in a chunk is the length
+ * ridden, whatever the run speed.
  */
-export function stepGrind(player: PlayerState, distanceAlong: number): boolean {
+export function stepGrind(
+  player: PlayerState,
+  distanceAlong: number,
+  length: number = TUNING.rail.length,
+): boolean {
   if (player.motion !== 'grinding') return false;
 
-  if (distanceAlong >= TUNING.rail.length) {
-    player.y = railTopHeight();
+  if (distanceAlong >= length) {
     releaseRail(player);
     return false;
   }
 
-  player.y = railHeightAt(distanceAlong);
+  player.y = railHeight();
   player.vy = 0;
   return true;
 }

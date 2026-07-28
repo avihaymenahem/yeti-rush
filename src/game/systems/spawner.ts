@@ -59,9 +59,12 @@ export interface CoinEntity {
 export interface RailEntity {
   active: boolean;
   lane: LaneIndex;
-  /** Absolute distance of the near end, where the player mounts. */
+  /** Absolute distance of the near end. */
   trackZ: number;
-  /** Set once ridden, so one rail cannot re-mount a player who fell off it. */
+  /** Metres from mount to dismount, authored per rail. */
+  length: number;
+  /** Set once ridden, so the run stat counts a rail once however often it is
+   *  caught and re-caught. */
   used: boolean;
 }
 
@@ -164,6 +167,7 @@ export function createSpawner(): SpawnerState {
     active: false,
     lane: 1 as LaneIndex,
     trackZ: 0,
+    length: TUNING.rail.length,
     used: false,
   }));
 
@@ -368,6 +372,7 @@ function layChunk(
     entity.active = true;
     entity.lane = laneOf(spec.lane, mirror);
     entity.trackZ = startZ + spec.z;
+    entity.length = spec.length ?? TUNING.rail.length;
     entity.used = false;
   }
 
@@ -395,7 +400,7 @@ function layChunk(
   // obstacle you were already airborne for.
   const railZ = furthestRailZ(chunk);
   if (railZ !== null) {
-    const touchdown = startZ + railZ + TUNING.rail.length + RAIL_LANDING_DISTANCE;
+    const touchdown = startZ + railZ + RAIL_LANDING_DISTANCE;
     state.clearUntil = Math.max(state.clearUntil, touchdown + TUNING.rail.landingClearance);
   }
 
@@ -447,7 +452,7 @@ export function updateSpawner(
   for (const rail of state.rails) {
     // A rail is long, and the player is still riding it well after its near end
     // has gone by, so it survives its own length past the usual cutoff.
-    if (rail.active && worldZOf(rail.trackZ, distance) > RECYCLE_BEHIND + TUNING.rail.length) {
+    if (rail.active && worldZOf(rail.trackZ, distance) > RECYCLE_BEHIND + rail.length) {
       rail.active = false;
     }
   }

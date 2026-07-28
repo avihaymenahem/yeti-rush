@@ -11,9 +11,9 @@
  */
 
 import { LANES, TUNING, type LaneIndex } from '@/game/config/tuning';
-import { obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
+import { obstacleDef, type ClearAction, type ObstacleKind } from '@/game/content/obstacles';
 import { rampArcHeight } from '@/game/systems/ramp';
-import { railHeightAt } from '@/game/systems/rail';
+import { railHeight } from '@/game/systems/rail';
 
 export interface ChunkObstacle {
   kind: ObstacleKind;
@@ -71,6 +71,15 @@ export interface ChunkRail {
   lane: LaneIndex;
   /** Metres from the start of the chunk to the rail's near end. */
   z: number;
+  /**
+   * Metres from mount to dismount. Defaults to `TUNING.rail.length`.
+   *
+   * Authored per rail because a short bar and a long one are different
+   * propositions - one is a flick, the other a commitment you hold while the
+   * track goes by underneath - and a library with only one length has only one
+   * idea in it.
+   */
+  length?: number;
 }
 
 export interface ChunkTemplate {
@@ -448,54 +457,55 @@ export const CHUNKS: ChunkTemplate[] = [
   },
 
   // --- Grind rails ----------------------------------------------------------
-  // The other optional route. A ramp is a commitment - hit it and you fly a
-  // fixed arc. A rail is held: you mount it by *sliding* into the near end, it
-  // carries you up for as long as you stay in its lane, and steering off drops
-  // you. Riding past one without sliding does nothing, so like the ramp it is
-  // never part of the solvability guarantee.
+  // A level steel bar down the lane, mounted by ollieing onto it. Unlike a ramp
+  // a rail is *not* free: it stands in its lane, so riding into one is a crash
+  // and the solvability check counts it as a jumpable. What it pays is coins
+  // along its length and the score for holding it - a grind, not a lift.
   //
-  // The obstacles under a rail are the point of it: they are what a rider is
-  // being carried over, and what someone who misses the mount has to steer
-  // around instead. Every one of them leaves another lane open.
+  // Lengths are authored, and deliberately spread. A four-metre bar is a flick
+  // you either catch or do not; an eighteen-metre one is held while the track
+  // goes by underneath, and steering off it early costs the rest of the line.
   {
-    id: 'rail-run',
+    id: 'rail-short',
     tier: 1,
     weight: 8,
-    // Rail from z=2 to z=20. The boulder sits under the last stretch, where the
-    // bar is high enough to carry a rider clear over it - see the clearance
-    // check in `tests/rail.test.ts`.
-    obstacles: [{ kind: 'boulder', lane: 1, z: 18 }],
-    rails: [{ lane: 1, z: 2 }],
-    coins: [{ lane: 1, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
+    // z=6 to z=10. Short enough to be a single decision.
+    rails: [{ lane: 1, z: 6, length: 4 }],
+    obstacles: [],
+    coins: [{ lane: 1, z: 6, count: 3, spacing: 1.4, railFrom: 6 }],
   },
   {
-    id: 'rail-run-left',
+    id: 'rail-medium',
     tier: 1,
     weight: 8,
-    obstacles: [{ kind: 'boulder', lane: 0, z: 18 }],
-    rails: [{ lane: 0, z: 2 }],
-    coins: [{ lane: 0, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
+    rails: [{ lane: 0, z: 5, length: 9 }],
+    obstacles: [],
+    coins: [{ lane: 0, z: 5, count: 6, spacing: 1.5, railFrom: 5 }],
   },
   {
-    id: 'rail-run-right',
-    tier: 1,
-    weight: 8,
-    obstacles: [{ kind: 'boulder', lane: 2, z: 18 }],
-    rails: [{ lane: 2, z: 2 }],
-    coins: [{ lane: 2, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
-  },
-  {
-    id: 'rail-over-woodpile',
+    id: 'rail-long',
     tier: 2,
     weight: 7,
-    // A taller thing to clear, and a second blocked lane, so bailing off the
-    // rail leaves exactly one way through rather than two.
-    obstacles: [
-      { kind: 'woodpile', lane: 1, z: 19 },
-      { kind: 'boulder', lane: 0, z: 19 },
+    // Most of the chunk. Held, rather than caught.
+    rails: [{ lane: 1, z: 3, length: 16 }],
+    obstacles: [],
+    coins: [{ lane: 1, z: 3, count: 10, spacing: 1.6, railFrom: 3 }],
+  },
+  {
+    id: 'rail-pair',
+    tier: 3,
+    weight: 6,
+    // Two bars in different lanes, so the choice is which one to take rather
+    // than whether to bother.
+    rails: [
+      { lane: 0, z: 4, length: 6 },
+      { lane: 2, z: 12, length: 6 },
     ],
-    rails: [{ lane: 1, z: 2 }],
-    coins: [{ lane: 1, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
+    obstacles: [],
+    coins: [
+      { lane: 0, z: 4, count: 4, spacing: 1.5, railFrom: 4 },
+      { lane: 2, z: 12, count: 4, spacing: 1.5, railFrom: 12 },
+    ],
   },
 
   // --- Cave tunnels ---------------------------------------------------------
@@ -551,53 +561,6 @@ export const CHUNKS: ChunkTemplate[] = [
       { kind: 'tunnelRock', lane: 2, z: 13 },
     ],
     coins: [{ lane: 1, z: 16, count: 5 }],
-  },
-
-  // --- Jib crossbars --------------------------------------------------------
-  // Steel bars set *across* the piste rather than along it. Mechanically a
-  // jumpable - which is exactly what the solvability check sees - but landing on
-  // top instead of clearing it high pays out, so the same obstacle is a hazard
-  // to one player and a trick to another.
-  //
-  // Length is authored per bar via `span`, which is expanded into one obstacle
-  // per lane covered. A single-lane bar leaves two ways round; a full-width one
-  // has to be jumped. Neither needs the generator to know spans exist.
-  {
-    id: 'jib-single',
-    tier: 1,
-    weight: 7,
-    // One lane, so steering past is free and tapping it is a pure choice.
-    obstacles: [{ kind: 'crossbar', lane: 0, z: 12 }],
-    coins: [{ lane: 0, z: 10, count: 5, arc: true }],
-  },
-  {
-    id: 'jib-double',
-    tier: 2,
-    weight: 7,
-    // Two lanes wide: one lane is still open, so this asks whether the coins
-    // over the bar are worth more than the easy line beside it.
-    obstacles: [{ kind: 'crossbar', lane: 0, z: 12, span: 2 }],
-    coins: [{ lane: 1, z: 10, count: 6, arc: true }],
-  },
-  {
-    id: 'jib-full',
-    tier: 2,
-    weight: 6,
-    // The whole piste. A forced jump, and the only question left is whether to
-    // clear it or clip the top for the payout.
-    obstacles: [{ kind: 'crossbar', lane: 0, z: 12, span: 3 }],
-    coins: [{ lane: 1, z: 10, count: 6, arc: true }],
-  },
-  {
-    id: 'jib-stagger',
-    tier: 3,
-    weight: 6,
-    // Two bars of different lengths, far enough apart to be separate decisions.
-    obstacles: [
-      { kind: 'crossbar', lane: 1, z: 5, span: 2 },
-      { kind: 'crossbar', lane: 0, z: 16 },
-    ],
-    coins: [{ lane: 0, z: 4, count: 4, arc: true }],
   },
 
   // --- Tier 3: sustained pressure -------------------------------------------
@@ -662,7 +625,11 @@ export function chunksForTier(tier: number): ChunkTemplate[] {
  * always comes down onto clear track.
  */
 export function isRunway(chunk: ChunkTemplate): boolean {
-  return chunk.obstacles.length === 0;
+  // Rails count. They used to be pure triggers that could be ignored entirely,
+  // so a chunk of nothing but rails genuinely was safe ground; now a rail is a
+  // solid bar you can ride into, and a "runway" containing one would put an
+  // obstacle in exactly the stretch a committed flight has to land on.
+  return chunk.obstacles.length === 0 && (chunk.rails?.length ?? 0) === 0;
 }
 
 /** Runways are drawn from regardless of tier - a landing must always be safe. */
@@ -692,27 +659,56 @@ export function obstacleLanes(obstacle: ChunkObstacle): LaneIndex[] {
   return lanes;
 }
 
+/**
+ * Everything in a chunk the player has to get past, rails included.
+ *
+ * A rail is a solid bar standing in its lane: ollie onto it and you grind, ride
+ * into it and you go down. That makes it an obstacle with a jump answer, and it
+ * has to be visible to every rule built on obstacles - the solvability proof,
+ * the forced-action spacing, the reaction pacing. The earlier sloped rail was a
+ * pure trigger that could be ignored entirely, which is why it could be left out
+ * of all of them; this one cannot.
+ *
+ * Only the near end counts. A jump clears far more ground than any authored
+ * rail is long, so a player who answers the bar at its start has answered all
+ * of it.
+ */
+export function chunkHazards(chunk: ChunkTemplate): { lane: LaneIndex; z: number; action: ClearAction }[] {
+  const hazards = chunk.obstacles.flatMap((obstacle) =>
+    obstacleLanes(obstacle).map((lane) => ({
+      lane,
+      z: obstacle.z,
+      action: obstacleDef(obstacle.kind).action,
+    })),
+  );
+
+  for (const rail of chunk.rails ?? []) {
+    hazards.push({ lane: rail.lane, z: rail.z, action: 'jump' });
+  }
+
+  return hazards;
+}
+
 function computeForcedActionRows(chunk: ChunkTemplate): number[] {
-  const byRow = new Map<number, ChunkObstacle[]>();
-  for (const obstacle of chunk.obstacles) {
-    // Obstacles within a metre and a half of each other are one decision.
-    const key = Math.round(obstacle.z / 1.5);
+  const byRow = new Map<number, ReturnType<typeof chunkHazards>>();
+  for (const hazard of chunkHazards(chunk)) {
+    // Hazards within a metre and a half of each other are one decision.
+    const key = Math.round(hazard.z / 1.5);
     const bucket = byRow.get(key) ?? [];
-    bucket.push(obstacle);
+    bucket.push(hazard);
     byRow.set(key, bucket);
   }
 
   const forced: number[] = [];
   for (const row of byRow.values()) {
-    // Spans have to be counted lane by lane here. Read as a single entry, a
-    // crossbar covering the whole piste looks like one blocked lane and the row
-    // is classed as steerable - so the spacing rule that keeps two forced
-    // actions apart would never fire for the one obstacle most likely to need it.
-    const lanes = new Set(row.flatMap(obstacleLanes));
+    // Counted lane by lane, because a span read as a single entry looks like one
+    // blocked lane - the row would be classed as steerable and the rule keeping
+    // two forced actions apart would never fire for the widest obstacles there are.
+    const lanes = new Set(row.map((hazard) => hazard.lane));
     if (lanes.size < LANES.length) continue; // a lane is open - steer instead
 
-    const needsAction = row.some((obstacle) => obstacleDef(obstacle.kind).action !== 'dodge');
-    if (needsAction) forced.push(Math.min(...row.map((obstacle) => obstacle.z)));
+    const needsAction = row.some((hazard) => hazard.action !== 'dodge');
+    if (needsAction) forced.push(Math.min(...row.map((hazard) => hazard.z)));
   }
 
   return forced.sort((a, b) => a - b);
@@ -745,12 +741,12 @@ export function forcedActionRows(chunk: ChunkTemplate): number[] {
  */
 function computeDecisionRows(chunk: ChunkTemplate): number[] {
   const byRow = new Map<number, number[]>();
-  for (const obstacle of chunk.obstacles) {
+  for (const hazard of chunkHazards(chunk)) {
     // Same 1.5 m bucketing the solvability check uses, so both agree on what
     // counts as one row.
-    const key = Math.round(obstacle.z / 1.5);
+    const key = Math.round(hazard.z / 1.5);
     const bucket = byRow.get(key) ?? [];
-    bucket.push(obstacle.z);
+    bucket.push(hazard.z);
     byRow.set(key, bucket);
   }
 
@@ -797,10 +793,19 @@ export function lastRowZ(chunk: ChunkTemplate): number | null {
   return rows.length > 0 ? (rows[rows.length - 1] as number) : null;
 }
 
-/** The furthest a rail in this chunk starts, or null if it has none. */
+/**
+ * The furthest a rail in this chunk *ends*, or null if it has none.
+ *
+ * The end rather than the start, because what needs protecting is the ground
+ * past the dismount - and with lengths authored per rail, the rail that starts
+ * latest is not necessarily the one that finishes latest.
+ */
 export function furthestRailZ(chunk: ChunkTemplate): number | null {
   if (!chunk.rails || chunk.rails.length === 0) return null;
-  return chunk.rails.reduce((furthest, rail) => Math.max(furthest, rail.z), -Infinity);
+  return chunk.rails.reduce(
+    (furthest, rail) => Math.max(furthest, rail.z + (rail.length ?? TUNING.rail.length)),
+    -Infinity,
+  );
 }
 
 /** The furthest a ramp in this chunk reaches, or null if it has none. */
@@ -927,8 +932,8 @@ export function expandCoins(
 
       let y: number;
       if (run.railFrom !== undefined) {
-        // Sits a little above the bar, where the rider's feet are.
-        y = baseHeight + railHeightAt(localZ - run.railFrom);
+        // Level with the grind, a little above the bar where the rider is.
+        y = baseHeight + railHeight();
       } else if (run.rampFrom !== undefined) {
         // Follow the real ramp flight path, so the coins sit where a launched
         // player actually passes.

@@ -52,8 +52,15 @@ function coinsLaidPerRun(metres: number, seeds = 16): number {
     rt.running = true;
     const seen = new Set<string>();
 
-    while (rt.distance < metres) {
+    // Guarded on `alive` as well as distance. `tickRun` returns immediately once
+    // the run is over, so distance stops advancing and a distance-only loop
+    // spins for ever - which is exactly what happened the moment rails became
+    // something you can crash into.
+    while (rt.alive && rt.distance < metres) {
       for (const obstacle of rt.track.obstacles) obstacle.active = false;
+      // Rails are hazards now, and this is measuring what the track *offers*
+      // rather than whether a player survives it.
+      for (const rail of rt.track.rails) rail.active = false;
       for (const coin of rt.track.coins) {
         if (!coin.active) continue;
         seen.add(`${coin.trackZ.toFixed(2)}:${coin.lane}`);

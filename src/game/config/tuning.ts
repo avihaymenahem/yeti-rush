@@ -131,118 +131,66 @@ export const TUNING = {
   /**
    * Grind rails.
    *
-   * The second optional route, alongside the ramp, and deliberately a different
-   * shape of decision. A ramp is a commitment: hit it and you fly a fixed arc
-   * you cannot abort. A rail is *held* - you mount it by sliding, you ride it up
-   * for as long as you stay in its lane, and steering off drops you. One rewards
-   * timing, the other rewards nerve.
+   * A level steel bar running down the track, mounted by *jumping onto it* -
+   * a skate rail. Ride into one on the ground and you go down; ollie onto it and
+   * you grind until it runs out or you steer off.
    *
-   * Like the ramp arc, the rise is defined over distance rather than time, so
-   * the rail carries the player to the same height at every speed.
+   * The first version was a ramp wearing a rail's name: it rose from ankle
+   * height to nearly four metres and was ridden onto at the low end, so it
+   * carried the player over obstacles rather than asking anything of them, and
+   * the one input everybody tries at a rail was not how you got on. A level bar
+   * pays in coins and score rather than in rescue, which is what a grind is.
    */
   rail: {
-    /** Metres from mount to release. */
-    length: 18,
     /**
-     * Height of the near end. Low enough that a sliding player meets it at
-     * their own height and steps on rather than being snapped upwards, and low
-     * enough that riding past one without sliding never looks like a wall.
-     */
-    baseHeight: 0.2,
-    /**
-     * Height gained by the far end.
+     * Height of the bar. Low, like the handrail it is imitating.
      *
-     * Set by what the rail has to clear, not by taste. A boulder stands 3.0 m
-     * and a woodpile 3.2 m, and the rider has to be over them with margin
-     * *before* the end of the bar - at 2.9 the rail only cleared a boulder in
-     * its last metre, so the coin line led riders straight into one.
-     * `tests/rail.test.ts` checks every authored rail against its own
-     * obstacles, so this cannot drift back.
+     * Two things set it. High enough that a standing player cannot ride under
+     * it, and low enough that its underside clears no one at all - a sliding
+     * player is `slideHalfHeight * 2` tall, and the bar sits below that, so
+     * ducking is not a second way past. There is one answer to a rail and it is
+     * to jump.
+     *
+     * Generous against the jump arc even so: the player's feet are above the bar
+     * from roughly a twentieth of a second after take-off until just before
+     * landing, so the ollie has to be in the right place, not at the right instant.
      */
-    rise: 3.6,
+    height: 0.8,
     /**
-     * Upward velocity at release, so the rail throws you off the end instead of
-     * dropping you off it. Well under a jump - this is a pop, not a launch.
+     * Metres from mount to dismount, when a chunk does not say otherwise.
+     *
+     * Authored per rail (`length` in `ChunkRail`), because a two-metre bar and a
+     * twenty-metre one are different propositions - one is a flick, the other is
+     * a commitment - and a library with only one of them has only one idea.
      */
-    exitVelocity: 3.4,
+    length: 14,
     /**
      * How near the bar the player's feet must be to catch it, in metres.
      *
-     * The rail is caught along its whole length, not just at the near end, so
-     * jumping at one lands you on it wherever the arc happens to meet the bar.
-     * Requiring the near end meant a jump - the instinct every rail in every
-     * game trains - sailed over the mount point and dumped the player back on
-     * the ground with the obstacle the rail exists to clear already too close
-     * to steer around.
-     *
-     * Sized against how far the player moves vertically in one tick. A dive is
-     * the fastest that gets: 13.3 u/s, or 0.22 m per 60 Hz step. This leaves
-     * roughly five steps of window, so the catch is generous without the bar
-     * appearing to reach out and grab anyone.
+     * Sized against how far the player moves vertically in one 60 Hz tick, which
+     * at the top of a fall is about 0.22 m. This leaves a window of several
+     * ticks, so the catch is generous without the bar appearing to reach out.
      */
     catchHeight: 0.55,
     /**
-     * The highest the bar can be and still be ridden onto from the snow.
+     * Metres of obstacle-free track required after a rail drops the player.
      *
-     * Riding straight into a rail mounts it - no jump, no slide, nothing to
-     * time. It is a solid steel bar standing on posts, and the one thing a
-     * player will always try is going at it in a straight line; demanding an
-     * input first meant that attempt passed clean through the middle of it.
+     * The dismount is a fall, and a falling player can steer but cannot jump or
+     * slide - so anything in that stretch needing either is unanswerable, and a
+     * row sealing every lane is fatal however well it was read. Exactly the
+     * problem ramp landings had, protected the same way.
      *
-     * Above this the bar is over the player's head and they simply run
-     * underneath, which is what keeps the track beneath a rail passable on its
-     * own terms. At 0.2 m of rise per metre this makes the near 3.5 m of every
-     * rail a mount, or six ticks even at top speed - wide enough that arriving
-     * at it cannot miss it.
+     * Unlike a ramp, the descent is not a fixed *distance*: the fall takes fixed
+     * time, so it covers more ground the faster the run gets. The spawner
+     * measures it at the worst case rather than trusting this constant to cover
+     * it - see `railLandingDistance`.
      */
-    stepUpHeight: 0.9,
-    /**
-     * Metres of obstacle-free track required after a rail throws the player off.
-     *
-     * The exit is a fall from nearly four metres, and a falling player can steer
-     * but cannot jump or slide - so anything in that stretch needing either is
-     * unanswerable, and a row that seals every lane is fatal no matter how well
-     * it was read. Exactly the problem ramp landings had, and it is protected
-     * the same way: the spawner keeps the whole descent plus this margin clear.
-     *
-     * Unlike the ramp, the descent itself is *not* a fixed distance - the fall
-     * takes a fixed time, so it covers more ground the faster the run gets. The
-     * spawner therefore measures it at the worst case rather than assuming this
-     * constant covers it.
-     */
-    landingClearance: 10,
+    landingClearance: 8,
 
-    /** Trigger box at the near end, where the player mounts. */
-    halfWidth: 0.75,
-    halfHeight: 0.45,
+    /** Collider half-extents of the bar, per metre of its length. */
+    halfWidth: 0.55,
+    halfHeight: 0.16,
     halfDepth: 1.0,
-    centreY: 0.4,
-  },
-
-  /**
-   * Jib crossbars: steel rails set across the piste rather than along it.
-   *
-   * Unlike a grind rail there is nothing to ride. The world scrolls along Z, so
-   * a bar perpendicular to it passes underneath in a few hundredths of a second
-   * however fast the run is going - there is no length to travel. What it offers
-   * instead is precision: clear it high and nothing happens, or clip the top of
-   * your arc off it and get paid.
-   */
-  crossbar: {
-    /**
-     * How near the top of the bar the player's feet must be to count as landed
-     * on it, in metres.
-     *
-     * The same reasoning as the grind rail's catch: sized against how far the
-     * player moves vertically in one 60 Hz tick, which at the top of a fall is
-     * about 0.22 m. This leaves a window of a few ticks - tight enough that
-     * clearing the bar cleanly is the safe play and tapping it is a choice.
-     */
-    tapTolerance: 0.4,
-    /** Score for a clean tap. */
-    tapScore: 60,
-    /** Coins for a clean tap, which is what makes it worth the risk. */
-    tapCoins: 12,
   },
 
   snow: {

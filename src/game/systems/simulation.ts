@@ -28,6 +28,7 @@ import { speedAt, tierAt } from '@/game/systems/difficulty';
 import { laneToX, stepLane } from '@/game/systems/lanes';
 import {
   bailRail,
+  isGrounded,
   endFlight,
   launchFromRamp,
   mountRail,
@@ -110,7 +111,6 @@ export function tickRun(rt: RuntimeState, dt: number): void {
     writePlayerAabb(rt.player, rt.lane.x, rt.scratch.player);
   }
 
-  triggerCrossbars(rt);
   collideObstacles(rt);
   if (!rt.alive) return;
 
@@ -147,20 +147,25 @@ function rideRail(rt: RuntimeState): void {
     return;
   }
 
-  stepGrind(player, rt.distance - player.grindFromZ);
+  const bar = rt.track.rails.find(
+    (rail) => rail.active && rail.trackZ === player.grindFromZ,
+  );
+  stepGrind(player, rt.distance - player.grindFromZ, bar?.length);
 }
 
 /**
- * Mounts a rail the player has reached in any way at all.
+ * Puts a jumping player onto a rail, and trips one who rode into it.
  *
- * Tested along the rail's whole length rather than against a trigger box at its
- * near end. The box was one of the bugs behind rails failing to mount: it lived
- * inside the six-metre collision window, so an eighteen-metre rail was only
- * catchable in the first couple of metres of it.
+ * Both halves matter and they are the same rule seen from either side. A grind
+ * rail is a solid steel bar a metre off the snow: ollie onto it and you ride,
+ * ride into it and you go down. The first version let a grounded player step
+ * onto the low end, which made it a lift rather than a grind - and a version
+ * before that let a running player pass clean through the middle of it, which
+ * was worse.
  *
- * Whether the player mounts is left entirely to `mountRail`, which decides on
- * geometry alone - where their feet are against where the bar is. Nothing here
- * asks what they pressed.
+ * Unlike a ramp, a rail is therefore *not* free. It occupies its lane, and
+ * `railObstacles` hands it to the solvability check as a jumpable at its near
+ * end so the guarantee accounts for it rather than being told it is not there.
  */
 function triggerRails(rt: RuntimeState): void {
   const { player } = rt;
@@ -173,15 +178,34 @@ function triggerRails(rt: RuntimeState): void {
     if (rt.lane.targetLane !== bar.lane) continue;
 
     const along = rt.distance - bar.trackZ;
-    if (along < 0 || along >= TUNING.rail.length) continue;
+    if (along < 0 || along >= bar.length) continue;
 
-    if (!mountRail(player, bar.trackZ, bar.lane, along)) continue;
+    if (mountRail(player, bar.trackZ, bar.lane, along)) {
+      // Re-catching a rail after popping off it mid-grind is a trick, not a
+      // cheat, so remounting is allowed - `used` only guards the run stat.
+      if (!bar.used) {
+        bar.used = true;
+        rt.railGrinds++;
+      }
+      continue;
+    }
 
-    // Re-catching a rail after popping off it mid-grind is a trick, not a
-    // cheat, so remounting is allowed - `used` only guards the run stat.
-    if (!bar.used) {
-      bar.used = true;
-      rt.railGrinds++;
+    // On the snow and in its lane: a collision, and it is what makes landing the
+    // ollie worth anything.
+    //
+    // Sliding is caught too, and the bar's height is set so that this is honest
+    // rather than enforced: its underside sits below a sliding player, so there
+    // is nothing to duck beneath. A rail has one answer and it is to jump -
+    // an obstacle with two answers teaches neither of them.
+    if (isGrounded(player) && !isInvulnerable(rt.powerUps)) {
+      // Ends the run outright rather than tripping. A drift or a log is
+      // something you clip and ride out of; a steel bar at shin height is not,
+      // and a rail that merely slowed you down would make ignoring it the
+      // cheaper option than learning to ollie it.
+      rt.alive = false;
+      rt.deathCause = 'obstacle';
+      rt.running = false;
+      return;
     }
   }
 }
@@ -293,52 +317,6 @@ function collideObstacles(rt: RuntimeState): void {
       obstacle.passed = true;
       rt.combo++;
     }
-  }
-}
-
-/**
- * Pays out a crossbar landed on from above, and clears it so the collision pass
- * that follows does not then read the same bar as a crash.
- *
- * A separate pass rather than a branch inside the collision test, because the
- * two are asking opposite questions. Collision asks whether the player's box
- * *overlaps* the bar - and when your feet are on top of it, it does not. You are
- * standing on it, not intersecting it. Gating the tap behind an overlap left a
- * window about one and a half ticks wide, which is not a mechanic, it is a
- * coin toss.
- *
- * Deliberately gives no upward pop, however much a bounce would flatter it. A
- * pop is airtime, and airtime is a span in which the player can steer but
- * cannot jump or slide - exactly the committed flight that ramp landings and
- * rail exits reserve protected track for. Adding a third such span, fired
- * unpredictably by a *reward* rather than by a route the spawner laid
- * deliberately, would put obstacles back inside spans nothing had cleared. The
- * payout is the reward; the arc is left alone.
- */
-function triggerCrossbars(rt: RuntimeState): void {
-  const { player } = rt;
-
-  // Has to be a descent onto it. Rising into the bar from underneath is a
-  // mistimed jump, and reading that as a trick would reward the wrong instinct.
-  if (player.motion !== 'airborne' || player.vy > 0) return;
-
-  for (const obstacle of rt.track.obstacles) {
-    if (!obstacle.active || obstacle.kind !== 'crossbar') continue;
-    if (rt.lane.targetLane !== obstacle.lane) continue;
-
-    const def = obstacleDef(obstacle.kind);
-    const worldZ = worldZOf(obstacle.trackZ, rt.distance);
-    // A tight window, unlike the six metres collision uses: the bar is a few
-    // centimetres deep and landing on one two metres away is not landing on it.
-    if (Math.abs(worldZ) > def.halfDepth + TUNING.player.halfDepth) continue;
-
-    const top = def.centreY + def.halfHeight;
-    if (Math.abs(player.y - top) > TUNING.crossbar.tapTolerance) continue;
-
-    rt.score += TUNING.crossbar.tapScore;
-    rt.coins += TUNING.crossbar.tapCoins;
-    rt.crossbarTaps++;
-    obstacle.active = false;
   }
 }
 

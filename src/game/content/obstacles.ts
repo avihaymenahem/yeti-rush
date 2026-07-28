@@ -59,6 +59,12 @@ export const OBSTACLES = {
    * in. That is the whole mechanic: a wall across the piste with exactly one
    * gap, which asks nothing except being in the right place, early.
    *
+   * Ten metres deep, so it is a passage rather than a doorway. The first version
+   * was a single cube: the player crossed a threshold and was out the other side
+   * in a frame, which read as a wall with a hole in it rather than as anything
+   * you went *through*. At the speeds this game runs, a tunnel needs real length
+   * before it registers as one at all.
+   *
    * A full lane wide, so segments in adjacent lanes butt together with no seam.
    * Taller than a jump on purpose: a rock face that can be cleared by jumping
    * would make the entrance decorative, and the read has to be "there is one way
@@ -68,10 +74,10 @@ export const OBSTACLES = {
     centreY: 2.4,
     halfWidth: 1.1,
     halfHeight: 2.4,
-    halfDepth: 1.3,
+    halfDepth: 5.0,
     action: 'dodge',
     color: '#6d7683',
-    visual: { width: 2.2, height: 4.8, depth: 2.6 },
+    visual: { width: 2.2, height: 4.8, depth: 10 },
   },
 
   /**
@@ -79,7 +85,11 @@ export const OBSTACLES = {
    *
    * The alternative shape of entrance. Where a plain gap asks only for the right
    * lane, this asks for the right lane *and* a slide, so the tunnel can be a
-   * two-part decision without ever sealing the track. Same collider geometry as
+   * two-part decision without ever sealing the track.
+   *
+   * As deep as the rock beside it, so the slide is held *through* the passage
+   * rather than flicked at its mouth. At top speed ten metres is about a third
+   * of a second, comfortably inside a slide's duration. Same collider geometry as
    * a banner, because it has the same answer - the difference is what it looks
    * like and what it sits between.
    */
@@ -87,37 +97,10 @@ export const OBSTACLES = {
     centreY: 2.4,
     halfWidth: 1.1,
     halfHeight: 1.4,
-    halfDepth: 1.3,
+    halfDepth: 5.0,
     action: 'slide',
     color: '#7d8794',
-    visual: { width: 2.2, height: 2.8, depth: 2.6 },
-  },
-
-  /**
-   * A jib bar: a steel rail set across the piste on low posts.
-   *
-   * Mechanically a jumpable, and that is what the solvability check sees. What
-   * makes it its own thing is that landing *on* it pays - see `crossbarTap` in
-   * `systems/simulation.ts`. Clearing it high is safe and free; clipping the top
-   * of your arc off it is worth coins, which is the whole point of a jib.
-   *
-   * Its span is authored per chunk rather than fixed, so one may cross a single
-   * lane or the whole piste (see `span` in `content/chunks.ts`). A crossbar is
-   * laid as one obstacle per lane it covers, which is what lets every existing
-   * system - solvability, pacing, mirroring, collision - handle it unchanged.
-   *
-   * Sits low. It has to be clearable by an ordinary jump from any point in the
-   * run-up, and the top has to be somewhere an arc can plausibly touch, or
-   * landing on it would be luck rather than timing.
-   */
-  crossbar: {
-    centreY: 0.55,
-    halfWidth: 1.1,
-    halfHeight: 0.55,
-    halfDepth: 0.22,
-    action: 'jump',
-    color: '#9fb0bd',
-    visual: { width: 2.2, height: 1.1, depth: 0.44 },
+    visual: { width: 2.2, height: 2.8, depth: 10 },
   },
 
   /**

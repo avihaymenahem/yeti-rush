@@ -51,7 +51,9 @@ const COLORS = {
   tunnelRock: '#6d7683',
   tunnelRockDark: '#4d545e',
   tunnelLip: '#98a3b0',
-  tunnelDark: '#232a33',
+  tunnelInner: '#3c434d',
+  tunnelDeep: '#2b313a',
+  tunnelDark: '#171c23',
   /** Grind rail: galvanised steel, a lit top edge, and darker posts. */
   railSteel: '#8d9aa8',
   railShine: '#e6eef6',
@@ -360,89 +362,62 @@ function buildRamp(): THREE.BufferGeometry {
  * ridden. Chevrons on the near face point at it, the same trick that makes the
  * ramp legible from a distance.
  */
+/**
+ * A grind rail: a level steel bar on posts, built **one metre long**.
+ *
+ * Unit length on purpose. Rails carry an authored length, so the renderer scales
+ * this along Z rather than the geometry being rebuilt per size - one instanced
+ * mesh still draws every rail in the world however many different lengths are on
+ * screen. Everything that must not stretch with it - post thickness, the collar
+ * at the near end - is therefore built as a separate short piece placed at the
+ * ends, where scaling distorts it least.
+ *
+ * The bar runs along -z from the origin, matching how rails are placed.
+ */
 function buildRail(): THREE.BufferGeometry {
-  const { length, baseHeight, rise } = TUNING.rail;
-  const pitch = Math.atan2(rise, length);
-  const barLength = Math.hypot(length, rise);
+  const { height } = TUNING.rail;
 
   const pieces: Piece[] = [
-    // A packed-snow lead-in at the near end. Without it the rail begins in
-    // mid-air at ankle height and there is nothing to aim a slide at; this is
-    // the bit that says "come in here", the same job the ramp's chevrons do.
-    { geometry: wedge(1.5, baseHeight + 0.12, 2.6), color: COLORS.packedSnow, position: [0, 0, 1.1] },
-
-    // The bar itself, pitched up along the run and pushed half its length away
-    // so its near end sits at z = 0. Wide enough to read at distance: a
-    // scale-accurate handrail is a single pixel by the time you need to decide.
+    // The bar itself, spanning the unit length. Wide enough to read at
+    // distance: a scale-accurate handrail is a single pixel by the time you
+    // need to decide whether to go for it.
     {
-      geometry: new THREE.BoxGeometry(0.46, 0.2, barLength),
+      geometry: new THREE.BoxGeometry(0.46, 0.18, 1),
       color: COLORS.railSteel,
-      rotation: [pitch, 0, 0],
-      position: [0, baseHeight + rise / 2, -length / 2],
+      position: [0, height, -0.5],
     },
-    // A brighter cap along the top, so the ride surface catches the light and
-    // the rail does not read as a shadow against the snow.
+    // A brighter cap along the top, so the ride surface catches the light
+    // instead of reading as a shadow against the snow.
     {
-      geometry: new THREE.BoxGeometry(0.36, 0.08, barLength * 0.99),
+      geometry: new THREE.BoxGeometry(0.34, 0.07, 1),
       color: COLORS.railShine,
-      rotation: [pitch, 0, 0],
-      position: [0, baseHeight + rise / 2 + 0.12, -length / 2],
-    },
-    // Warm collars at both ends. The near one marks the mount, the far one
-    // marks where you get thrown off, and both stand out against a cold slope.
-    {
-      geometry: new THREE.BoxGeometry(0.56, 0.3, 0.34),
-      color: COLORS.rampMark,
-      position: [0, baseHeight + 0.06, -0.1],
-    },
-    {
-      geometry: new THREE.BoxGeometry(0.56, 0.3, 0.34),
-      color: COLORS.rampMark,
-      position: [0, baseHeight + rise + 0.06, -length + 0.1],
+      position: [0, height + 0.11, -0.5],
     },
   ];
 
-  // Posts down to the snow, getting taller as the rail climbs. Thick enough to
-  // be seen, which is also what makes the *height* of the rail legible - the
-  // bar alone gives the eye nothing to judge it against.
-  const posts = 6;
-  for (let i = 0; i < posts; i++) {
-    const t = (i + 0.5) / posts;
-    const z = -t * length;
-    const top = baseHeight + rise * t;
-    for (const side of [-1, 1] as const) {
-      pieces.push({
-        geometry: new THREE.BoxGeometry(0.13, top, 0.13),
-        color: COLORS.railPost,
-        position: [side * 0.2, top / 2, z],
-      });
-    }
-    // A cross brace, which is what stops a row of posts reading as a fence.
+  // Posts at both ends. Two only: at unit length these scale with the rail, and
+  // a row of them would smear into a fence on a long one.
+  for (const end of [-0.06, -0.94] as const) {
     pieces.push({
-      geometry: new THREE.BoxGeometry(0.5, 0.09, 0.09),
+      geometry: new THREE.BoxGeometry(0.13, height, 0.13),
       color: COLORS.railPost,
-      position: [0, top * 0.45, z],
+      position: [0, height / 2, end],
     });
   }
 
-  // Chevrons on the lead-in, pointing at the mount.
-  for (let i = 0; i < 3; i++) {
-    for (const side of [-1, 1] as const) {
-      pieces.push({
-        geometry: new THREE.BoxGeometry(0.5, 0.05, 0.16),
-        color: COLORS.rampMark,
-        rotation: [0, side * 0.42, 0],
-        position: [side * 0.24, 0.06 + i * 0.04, 2.3 - i * 0.62],
-      });
-    }
-  }
+  // A warm collar at the near end - the mark that says "this is where it
+  // starts", the same job the ramp's chevrons do.
+  pieces.push({
+    geometry: new THREE.BoxGeometry(0.56, 0.26, 0.06),
+    color: COLORS.rampMark,
+    position: [0, height, -0.02],
+  });
 
   return assemble(pieces);
 }
 
-/** Built once and shared. Ramps are not obstacles, so they stand apart. */
-let rampCache: THREE.BufferGeometry | null = null;
 let railCache: THREE.BufferGeometry | null = null;
+let rampCache: THREE.BufferGeometry | null = null;
 
 export function railGeometry(): THREE.BufferGeometry {
   railCache ??= buildRail();
@@ -456,7 +431,6 @@ export function rampGeometry(): THREE.BufferGeometry {
 
 /** Every obstacle kind built in code rather than loaded from a model. */
 export const PROP_BUILDERS = {
-  crossbar: buildCrossbar,
   tunnelRock: buildTunnelRock,
   tunnelArch: buildTunnelArch,
   chalet: buildChalet,
@@ -494,7 +468,7 @@ export function isPropKind(kind: string): kind is PropKind {
 // `simulation.ts` still matches what is drawn.
 
 /**
- * A block of cave rock, one lane wide.
+ * A block of cave rock, one lane wide and a full passage deep.
  *
  * Deliberately built to tile. Instances in adjacent lanes have to read as one
  * cliff rather than as three boulders in a row, so the block is exactly a lane
@@ -514,8 +488,8 @@ function buildTunnelRock(): THREE.BufferGeometry {
       color: COLORS.tunnelRock,
       position: [0, height * 0.4, 0],
     },
-    // A darker recess on the face, so a flat wall has something to catch the
-    // raking key light and does not read as a painted backdrop.
+    // A darker recess on the approach face, so a flat wall has something to
+    // catch the raking key light and does not read as a painted backdrop.
     {
       geometry: new THREE.BoxGeometry(laneWidth * 0.62, height * 0.5, 0.18),
       color: COLORS.tunnelRockDark,
@@ -523,11 +497,11 @@ function buildTunnelRock(): THREE.BufferGeometry {
     },
   ];
 
-  // A ragged crown: three slabs of different heights, which is what stops a
+  // A ragged crown, kept inside the collider: `tests/models.test.ts` refuses art
+  // that towers over the thing which actually stops the player, because a
+  // silhouette the hitbox does not back up reads as solid and is then passed
+  // straight through. Three slabs of different heights, which is what stops a
   // tiled wall reading as masonry.
-  // Kept inside the collider: `tests/models.test.ts` refuses art that towers
-  // over the thing that actually stops the player, because a silhouette the
-  // hitbox does not back up is read as solid and then passed straight through.
   const crown = [
     { x: -laneWidth * 0.28, w: laneWidth * 0.42, h: height * 0.16 },
     { x: laneWidth * 0.06, w: laneWidth * 0.5, h: height * 0.11 },
@@ -554,8 +528,15 @@ function buildTunnelRock(): THREE.BufferGeometry {
 }
 
 /**
- * The low mouth of the cave: the same rock, carrying a lintel with a gap under
- * it. Built to tile against `tunnelRock` on either side.
+ * The mouth and roof of the cave: rock overhead with a passage beneath it.
+ *
+ * The dark is the point. A tunnel that is merely a gap between two rocks reads
+ * as a doorway; what makes it a *tunnel* is that the inside is another place,
+ * so the walls, roof and back of the passage are all several steps down the
+ * value scale from the snow outside, and the roof deepens towards the far end
+ * where no light would reach. There is no lighting trick behind this - the
+ * shading is baked into vertex colours, which is what keeps the whole thing one
+ * instanced draw.
  */
 function buildTunnelArch(): THREE.BufferGeometry {
   const laneWidth = Math.abs(LANES[1] - LANES[0]);
@@ -565,101 +546,67 @@ function buildTunnelArch(): THREE.BufferGeometry {
   const top = def.centreY + def.halfHeight;
 
   const pieces: Piece[] = [
-    // The lintel. Its underside is the thing the player is judging, so it gets
-    // a lighter face - a dark edge against a dark opening is unreadable.
+    // The lintel over the whole passage.
     {
       geometry: new THREE.BoxGeometry(laneWidth, top - underside, depth),
       color: COLORS.tunnelRock,
       position: [0, (top + underside) / 2, 0],
     },
+    // A lit lip at the near edge, which is the thing the player is judging. A
+    // dark edge against a dark opening is unreadable at speed.
     {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.98, 0.12, depth * 0.98),
+      geometry: new THREE.BoxGeometry(laneWidth * 0.98, 0.14, 0.5),
       color: COLORS.tunnelLip,
-      position: [0, underside + 0.06, 0],
+      position: [0, underside + 0.07, depth / 2 - 0.25],
     },
-    // A weathered band across the front of the lintel. Not decoration: the
-    // approach face has to carry at least as much detail as the back, or the
-    // player is reading the plainest side of the prop for the whole approach.
+    // A weathered band across the front, so the approach face carries at least
+    // as much detail as the back - `tests/models.test.ts` enforces that, after
+    // the chalet spent months presenting the player with its blank side.
     {
       geometry: new THREE.BoxGeometry(laneWidth * 0.9, (top - underside) * 0.34, 0.14),
       color: COLORS.tunnelRockDark,
       position: [0, underside + (top - underside) * 0.62, depth / 2 - 0.05],
     },
-    // The dark of the tunnel behind the opening, which is what makes it read as
-    // a way *in* rather than as a gap in a wall.
     {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.86, underside, 0.2),
-      color: COLORS.tunnelDark,
-      position: [0, underside / 2, -depth / 2 + 0.1],
-    },
-    // Shoulders, narrow enough to leave the opening clear.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.09, underside, depth),
-      color: COLORS.tunnelRock,
-      position: [-laneWidth * 0.455, underside / 2, 0],
-    },
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.09, underside, depth),
-      color: COLORS.tunnelRock,
-      position: [laneWidth * 0.455, underside / 2, 0],
-    },
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 1.02, 0.16, depth * 0.9),
+      geometry: new THREE.BoxGeometry(laneWidth * 1.02, 0.16, depth * 0.94),
       color: COLORS.snow,
       position: [0, top + 0.08, 0],
     },
   ];
 
-  return assemble(pieces);
-}
-
-/**
- * A jib crossbar: a steel rail on two posts, spanning one lane.
- *
- * Built exactly one lane wide so that instances in adjacent lanes butt together
- * into one continuous bar - which is what makes an authored span of two or three
- * read as a single longer rail rather than as separate obstacles that happen to
- * be in a line. The posts sit inboard of the lane edge for the same reason: a
- * post on the seam would double up where two segments meet.
- */
-function buildCrossbar(): THREE.BufferGeometry {
-  const laneWidth = Math.abs(LANES[1] - LANES[0]);
-  const def = obstacleDef('crossbar');
-  const top = def.centreY + def.halfHeight;
-
-  const pieces: Piece[] = [
-    // The bar. Full lane width, so segments meet with no gap.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth, 0.16, 0.34),
-      color: COLORS.railSteel,
-      position: [0, top - 0.08, 0],
-    },
-    // A lit top edge, the same trick the grind rail uses to stop a steel bar
-    // reading as a shadow against the snow.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth, 0.06, 0.24),
-      color: COLORS.railShine,
-      position: [0, top + 0.02, 0],
-    },
+  // The passage itself, in three slices from the mouth to the far end, each
+  // darker than the last. Stepping it rather than using one flat colour is what
+  // gives the tunnel depth: the eye reads the gradient as distance.
+  const slices = [
+    { z: depth * 0.32, colour: COLORS.tunnelInner },
+    { z: -depth * 0.02, colour: COLORS.tunnelDeep },
+    { z: -depth * 0.34, colour: COLORS.tunnelDark },
   ];
+  const sliceDepth = depth * 0.33;
 
-  for (const side of [-1, 1] as const) {
+  for (const slice of slices) {
+    // Roof of the passage.
     pieces.push({
-      geometry: new THREE.BoxGeometry(0.14, top - 0.08, 0.14),
-      color: COLORS.railPost,
-      position: [side * (laneWidth * 0.32), (top - 0.08) / 2, 0],
+      geometry: new THREE.BoxGeometry(laneWidth * 0.94, 0.1, sliceDepth),
+      color: slice.colour,
+      position: [0, underside - 0.05, slice.z],
     });
+    // Side walls, narrow enough to leave the lane clear to ride through.
+    for (const side of [-1, 1] as const) {
+      pieces.push({
+        geometry: new THREE.BoxGeometry(laneWidth * 0.07, underside, sliceDepth),
+        color: slice.colour,
+        position: [side * laneWidth * 0.465, underside / 2, slice.z],
+      });
+    }
   }
 
-  // Warm collars at the foot of each post, so the bar's height off the snow is
-  // legible from a distance - the bar alone gives the eye nothing to judge by.
-  for (const side of [-1, 1] as const) {
-    pieces.push({
-      geometry: new THREE.BoxGeometry(0.22, 0.12, 0.22),
-      color: COLORS.rampMark,
-      position: [side * (laneWidth * 0.32), 0.06, 0],
-    });
-  }
+  // The black at the very back, so the passage does not end in daylight.
+  pieces.push({
+    geometry: new THREE.BoxGeometry(laneWidth * 0.86, underside, 0.2),
+    color: COLORS.tunnelDark,
+    position: [0, underside / 2, -depth / 2 + 0.1],
+  });
 
   return assemble(pieces);
 }

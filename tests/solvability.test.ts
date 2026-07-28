@@ -237,6 +237,21 @@ function generateTrack(seed: number, totalDistance: number): PlacedObstacle[] {
         action: obstacleDef(obstacle.kind).action,
       });
     }
+
+    // Rails count. A grind rail is a solid bar standing in its lane - ollie onto
+    // it and you ride, ride into it and you go down - so the proof has to see it
+    // as a jumpable rather than be told it is not there. The sloped rail this
+    // replaced really was ignorable, which is why it was legitimately left out;
+    // reusing that exemption for a bar you can crash into would have made the
+    // guarantee quietly untrue for every lane a rail stood in.
+    for (const rail of spawner.rails) {
+      if (!rail.active) continue;
+      const key = `${rail.trackZ.toFixed(3)}:${rail.lane}:rail`;
+      if (seen.has(key)) continue;
+      // Only the near end: a jump covers far more ground than any authored rail
+      // is long, so answering the bar at its start answers all of it.
+      seen.set(key, { lane: rail.lane, z: rail.trackZ, action: 'jump' });
+    }
   }
 
   return [...seen.values()].sort((a, b) => a.z - b.z);

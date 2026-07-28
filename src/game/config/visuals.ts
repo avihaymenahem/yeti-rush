@@ -138,7 +138,10 @@ export const LIGHTING = {
    */
   key: {
     color: '#fff0d2',
-    intensity: 2.7,
+    // Raised with the ambient drop. The pair is what sets contrast: a stronger
+    // key against a darker fill deepens the shadow *and* brightens what is lit,
+    // where lowering ambient alone would only have made the whole slope duller.
+    intensity: 3.0,
     position: [-46, 52, -20] as const,
   },
   /**
@@ -160,12 +163,22 @@ export const LIGHTING = {
     sky: '#9fcbec',
     ground: '#d9c9ad',
     /**
-     * Lifted back up once the key started casting. Ambient is the *only* thing
-     * lighting the inside of a cast shadow, so with real shadows in the scene
-     * this number stopped being "how flat is everything" and became "how black
-     * are the shadows" - too low and a tree lays a hole in the snow.
+     * Ambient is the *only* thing lighting the inside of a cast shadow, so with
+     * real shadows in the scene this stopped being "how flat is everything" and
+     * became "how dark are the shadows" - and it is the lever for shadow
+     * *strength*, which nothing in `SHADOW` controls.
+     *
+     * Brought back down after the blur was widened. Softening cost density: a
+     * heavily blurred variance shadow spreads its darkness over a wider penumbra
+     * and bleeds a little light into the core, so the same shadow reads weaker
+     * the softer it gets. Lowering ambient puts that density back without
+     * touching `radius`, which is the only setting that would have cost softness.
+     *
+     * The floor is legibility, not taste: too low and a tree lays a black hole
+     * in the snow, and anything with a near-white silhouette stops reading
+     * against it.
      */
-    intensity: 0.5,
+    intensity: 0.36,
   },
 } as const;
 

@@ -278,3 +278,78 @@ describe('authored crossbar chunks', () => {
     expect(chunks.length - forced.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Cave tunnels.
+ *
+ * A rock face across the whole piste with exactly one way through. It reuses
+ * the crossbar's `span`, so what is tested here is not new machinery but the
+ * thing that machinery is being trusted to produce: a wall that really does
+ * seal every lane but one, and an entrance that really is passable.
+ */
+describe('cave tunnels', () => {
+  const tunnelKinds = ['tunnelRock', 'tunnelArch'] as const;
+
+  it('walls the piste with something no jump can clear', () => {
+    // A rock face a good jump could clear would make the entrance decorative.
+    const rock = obstacleDef('tunnelRock');
+    expect(rock.action).toBe('dodge');
+    expect(rock.centreY + rock.halfHeight).toBeGreaterThan(TUNING.player.jumpPeakHeight * 1.5);
+  });
+
+  it('leaves a low mouth that is answered by sliding', () => {
+    const arch = obstacleDef('tunnelArch');
+    expect(arch.action).toBe('slide');
+    // Underside below a standing player, so it cannot simply be run through.
+    expect(arch.centreY - arch.halfHeight).toBeLessThan(TUNING.player.halfHeight * 2);
+  });
+
+  const tunnels = CHUNKS.filter((chunk) =>
+    chunk.obstacles.some((o) => (tunnelKinds as readonly string[]).includes(o.kind)),
+  );
+
+  it('are actually authored', () => {
+    expect(tunnels.length).toBeGreaterThan(0);
+  });
+
+  it('always leave exactly one lane to go through', () => {
+    // The whole mechanic. Two open lanes is just a pair of boulders; none at all
+    // is a wall, and no amount of reading it would help.
+    for (const chunk of tunnels) {
+      const rowZs = new Set(chunk.obstacles.map((obstacle) => obstacle.z));
+
+      for (const z of rowZs) {
+        // Only the impassable rock counts as sealing. The entrance is whatever
+        // it does not cover, and that lane is either empty or carries the arch -
+        // which is passable, and so is not a wall.
+        const sealed = new Set(
+          chunk.obstacles
+            .filter((o) => o.z === z && obstacleDef(o.kind).action === 'dodge')
+            .flatMap(obstacleLanes),
+        );
+
+        expect(sealed.size, `${chunk.id} at z=${z} seals ${sealed.size} lanes`).toBe(
+          LANES.length - 1,
+        );
+      }
+    }
+  });
+
+  it('put the entrance in more than one place across the library', () => {
+    // Always the same lane and the chunk is answered by drifting there and
+    // never reading it again. Mirroring covers left against right; this is what
+    // makes sure the centre is used too.
+    const entrances = new Set<number>();
+    for (const chunk of tunnels) {
+      const sealed = new Set(
+        chunk.obstacles
+          .filter((o) => obstacleDef(o.kind).action === 'dodge')
+          .flatMap(obstacleLanes),
+      );
+      for (let lane = 0; lane < LANES.length; lane++) {
+        if (!sealed.has(lane as LaneIndex)) entrances.add(lane);
+      }
+    }
+    expect(entrances.size).toBeGreaterThan(1);
+  });
+});

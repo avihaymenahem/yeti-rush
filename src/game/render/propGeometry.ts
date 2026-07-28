@@ -47,6 +47,11 @@ const COLORS = {
   rampTimber: '#8a552b',
   /** Chevrons. Warm against a cold slope, so they carry at distance. */
   rampMark: '#ffa724',
+  /** Cave rock: cold grey stone, a darker recess, and the black of the tunnel. */
+  tunnelRock: '#6d7683',
+  tunnelRockDark: '#4d545e',
+  tunnelLip: '#98a3b0',
+  tunnelDark: '#232a33',
   /** Grind rail: galvanised steel, a lit top edge, and darker posts. */
   railSteel: '#8d9aa8',
   railShine: '#e6eef6',
@@ -452,6 +457,8 @@ export function rampGeometry(): THREE.BufferGeometry {
 /** Every obstacle kind built in code rather than loaded from a model. */
 export const PROP_BUILDERS = {
   crossbar: buildCrossbar,
+  tunnelRock: buildTunnelRock,
+  tunnelArch: buildTunnelArch,
   chalet: buildChalet,
   banner: buildBanner,
   branch: buildBranch,
@@ -485,6 +492,126 @@ export function isPropKind(kind: string): kind is PropKind {
 //
 // Sized to roughly the octahedron they replace, so the pickup radius in
 // `simulation.ts` still matches what is drawn.
+
+/**
+ * A block of cave rock, one lane wide.
+ *
+ * Deliberately built to tile. Instances in adjacent lanes have to read as one
+ * cliff rather than as three boulders in a row, so the block is exactly a lane
+ * across with a flat vertical face, and all the variation is in the *top* -
+ * where a seam between segments is hidden by the silhouette rather than sitting
+ * across the part the player is reading.
+ */
+function buildTunnelRock(): THREE.BufferGeometry {
+  const laneWidth = Math.abs(LANES[1] - LANES[0]);
+  const def = obstacleDef('tunnelRock');
+  const height = def.halfHeight * 2;
+  const depth = def.halfDepth * 2;
+
+  const pieces: Piece[] = [
+    {
+      geometry: new THREE.BoxGeometry(laneWidth, height * 0.8, depth),
+      color: COLORS.tunnelRock,
+      position: [0, height * 0.4, 0],
+    },
+    // A darker recess on the face, so a flat wall has something to catch the
+    // raking key light and does not read as a painted backdrop.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.62, height * 0.5, 0.18),
+      color: COLORS.tunnelRockDark,
+      position: [0, height * 0.36, depth / 2 - 0.06],
+    },
+  ];
+
+  // A ragged crown: three slabs of different heights, which is what stops a
+  // tiled wall reading as masonry.
+  // Kept inside the collider: `tests/models.test.ts` refuses art that towers
+  // over the thing that actually stops the player, because a silhouette the
+  // hitbox does not back up is read as solid and then passed straight through.
+  const crown = [
+    { x: -laneWidth * 0.28, w: laneWidth * 0.42, h: height * 0.16 },
+    { x: laneWidth * 0.06, w: laneWidth * 0.5, h: height * 0.11 },
+    { x: laneWidth * 0.34, w: laneWidth * 0.3, h: height * 0.19 },
+  ];
+  for (const slab of crown) {
+    pieces.push({
+      geometry: new THREE.BoxGeometry(slab.w, slab.h, depth * 0.86),
+      color: COLORS.tunnelRock,
+      position: [slab.x, height * 0.8 + slab.h / 2, 0],
+    });
+  }
+
+  // Snow caps, because everything else on this mountain has them.
+  for (const slab of crown) {
+    pieces.push({
+      geometry: new THREE.BoxGeometry(slab.w * 1.02, 0.16, depth * 0.88),
+      color: COLORS.snow,
+      position: [slab.x, height * 0.8 + slab.h + 0.06, 0],
+    });
+  }
+
+  return assemble(pieces);
+}
+
+/**
+ * The low mouth of the cave: the same rock, carrying a lintel with a gap under
+ * it. Built to tile against `tunnelRock` on either side.
+ */
+function buildTunnelArch(): THREE.BufferGeometry {
+  const laneWidth = Math.abs(LANES[1] - LANES[0]);
+  const def = obstacleDef('tunnelArch');
+  const depth = def.halfDepth * 2;
+  const underside = def.centreY - def.halfHeight;
+  const top = def.centreY + def.halfHeight;
+
+  const pieces: Piece[] = [
+    // The lintel. Its underside is the thing the player is judging, so it gets
+    // a lighter face - a dark edge against a dark opening is unreadable.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth, top - underside, depth),
+      color: COLORS.tunnelRock,
+      position: [0, (top + underside) / 2, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.98, 0.12, depth * 0.98),
+      color: COLORS.tunnelLip,
+      position: [0, underside + 0.06, 0],
+    },
+    // A weathered band across the front of the lintel. Not decoration: the
+    // approach face has to carry at least as much detail as the back, or the
+    // player is reading the plainest side of the prop for the whole approach.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.9, (top - underside) * 0.34, 0.14),
+      color: COLORS.tunnelRockDark,
+      position: [0, underside + (top - underside) * 0.62, depth / 2 - 0.05],
+    },
+    // The dark of the tunnel behind the opening, which is what makes it read as
+    // a way *in* rather than as a gap in a wall.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.86, underside, 0.2),
+      color: COLORS.tunnelDark,
+      position: [0, underside / 2, -depth / 2 + 0.1],
+    },
+    // Shoulders, narrow enough to leave the opening clear.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.09, underside, depth),
+      color: COLORS.tunnelRock,
+      position: [-laneWidth * 0.455, underside / 2, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 0.09, underside, depth),
+      color: COLORS.tunnelRock,
+      position: [laneWidth * 0.455, underside / 2, 0],
+    },
+    {
+      geometry: new THREE.BoxGeometry(laneWidth * 1.02, 0.16, depth * 0.9),
+      color: COLORS.snow,
+      position: [0, top + 0.08, 0],
+    },
+  ];
+
+  return assemble(pieces);
+}
 
 /**
  * A jib crossbar: a steel rail on two posts, spanning one lane.

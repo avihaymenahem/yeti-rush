@@ -52,6 +52,48 @@ export const OBSTACLES = {
   },
 
   /**
+   * Solid rock. The body of a cave mouth, and impassable.
+   *
+   * Authored with a `span` so one entry becomes a continuous massif across
+   * however many lanes it covers - and the lane it does *not* cover is the way
+   * in. That is the whole mechanic: a wall across the piste with exactly one
+   * gap, which asks nothing except being in the right place, early.
+   *
+   * A full lane wide, so segments in adjacent lanes butt together with no seam.
+   * Taller than a jump on purpose: a rock face that can be cleared by jumping
+   * would make the entrance decorative, and the read has to be "there is one way
+   * through" rather than "there is one easy way through".
+   */
+  tunnelRock: {
+    centreY: 2.4,
+    halfWidth: 1.1,
+    halfHeight: 2.4,
+    halfDepth: 1.3,
+    action: 'dodge',
+    color: '#6d7683',
+    visual: { width: 2.2, height: 4.8, depth: 2.6 },
+  },
+
+  /**
+   * The low mouth of a cave: rock overhead, a gap beneath it.
+   *
+   * The alternative shape of entrance. Where a plain gap asks only for the right
+   * lane, this asks for the right lane *and* a slide, so the tunnel can be a
+   * two-part decision without ever sealing the track. Same collider geometry as
+   * a banner, because it has the same answer - the difference is what it looks
+   * like and what it sits between.
+   */
+  tunnelArch: {
+    centreY: 2.4,
+    halfWidth: 1.1,
+    halfHeight: 1.4,
+    halfDepth: 1.3,
+    action: 'slide',
+    color: '#7d8794',
+    visual: { width: 2.2, height: 2.8, depth: 2.6 },
+  },
+
+  /**
    * A jib bar: a steel rail set across the piste on low posts.
    *
    * Mechanically a jumpable, and that is what the solvability check sees. What

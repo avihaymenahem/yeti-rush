@@ -498,6 +498,61 @@ export const CHUNKS: ChunkTemplate[] = [
     coins: [{ lane: 1, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
   },
 
+  // --- Cave tunnels ---------------------------------------------------------
+  // A rock face across the whole piste with exactly one way through. Nothing
+  // here is new machinery: an authored `span` of solid rock covering two lanes
+  // leaves the third as the entrance, and the solvability check reads that as
+  // what it is - a row with one lane open, answered by steering.
+  //
+  // What makes it worth having is the *read*. Two boulders and a gap say "pick a
+  // lane"; a cliff with a hole in it says "get in there, now", and it says it
+  // from much further out because the silhouette is enormous. The mechanic is
+  // the same one the game already had; the legibility is not.
+  {
+    id: 'tunnel-mouth',
+    tier: 1,
+    weight: 7,
+    // Rock over lanes 0-1, so lane 2 is the way in. Mirrored by the spawner,
+    // which is what puts the entrance on either side without a second chunk.
+    obstacles: [{ kind: 'tunnelRock', lane: 0, z: 13, span: 2 }],
+    coins: [{ lane: 2, z: 8, count: 6 }],
+  },
+  {
+    id: 'tunnel-mouth-centre',
+    tier: 2,
+    weight: 6,
+    // Entrance in the middle, so the answer is the same from either wing and
+    // the chunk cannot be beaten by always drifting one way.
+    obstacles: [
+      { kind: 'tunnelRock', lane: 0, z: 13 },
+      { kind: 'tunnelRock', lane: 2, z: 13 },
+    ],
+    coins: [{ lane: 1, z: 8, count: 6 }],
+  },
+  {
+    id: 'tunnel-duck',
+    tier: 2,
+    weight: 6,
+    // The low mouth: right lane *and* a slide. Every lane is occupied, so this
+    // is a forced action - the generator spaces it from the last one on its own.
+    obstacles: [
+      { kind: 'tunnelRock', lane: 0, z: 13, span: 2 },
+      { kind: 'tunnelArch', lane: 2, z: 13 },
+    ],
+    coins: [{ lane: 2, z: 16, count: 5 }],
+  },
+  {
+    id: 'tunnel-duck-centre',
+    tier: 3,
+    weight: 6,
+    obstacles: [
+      { kind: 'tunnelRock', lane: 0, z: 13 },
+      { kind: 'tunnelArch', lane: 1, z: 13 },
+      { kind: 'tunnelRock', lane: 2, z: 13 },
+    ],
+    coins: [{ lane: 1, z: 16, count: 5 }],
+  },
+
   // --- Jib crossbars --------------------------------------------------------
   // Steel bars set *across* the piste rather than along it. Mechanically a
   // jumpable - which is exactly what the solvability check sees - but landing on

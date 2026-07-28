@@ -13,9 +13,10 @@
  */
 
 import { useFrame } from '@react-three/fiber';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TUNING } from '@/game/config/tuning';
+import { coinGeometry } from '@/game/render/propGeometry';
 import { RECYCLE_Z, SPAWN_Z } from '@/game/render/trackLayout';
 import { coinPickupMultiplier } from '@/game/content/powerUps';
 import { runtime } from '@/game/state/runtime';
@@ -29,11 +30,10 @@ const scratch = new THREE.Object3D();
 // applied around the cylinder's own axis and be invisible.
 scratch.rotation.order = 'YXZ';
 
-const COIN_COLOR = '#f0b429';
-
 export function CoinField() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const spinRef = useRef(0);
+  const geometry = useMemo(() => coinGeometry(), []);
 
   useFrame((_, delta) => {
     const mesh = meshRef.current;
@@ -94,12 +94,20 @@ export function CoinField() {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_COINS]} frustumCulled={false}>
-      <cylinderGeometry args={[TUNING.coins.radius, TUNING.coins.radius, 0.08, 12]} />
+    <instancedMesh
+      ref={meshRef}
+      geometry={geometry}
+      args={[undefined, undefined, MAX_COINS]}
+      frustumCulled={false}
+    >
+      {/* Vertex-coloured, so the rim, face and numeral are one draw call rather
+          than three materials. The emissive is kept: it is what stops a coin
+          going dead when it drifts into a cast shadow, where an unlit disc is
+          just a dark spot the player stops chasing. */}
       <meshPhongMaterial
-        color={COIN_COLOR}
+        vertexColors
         flatShading
-        emissive="#7a5410"
+        emissive="#6b4a10"
         specular={GLOSS.metal.specular}
         shininess={GLOSS.metal.shininess}
       />

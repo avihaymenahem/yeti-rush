@@ -47,6 +47,10 @@ const COLORS = {
   rampTimber: '#8a552b',
   /** Chevrons. Warm against a cold slope, so they carry at distance. */
   rampMark: '#ffa724',
+  /** Coin: a darker struck rim, a brighter recessed face, and the mark on it. */
+  coinRim: '#c98a1f',
+  coinFace: '#ffd35c',
+  coinMark: '#8a5a12',
   /** Cave rock: cold grey stone, a darker recess, and the black of the tunnel. */
   tunnelRock: '#6d7683',
   tunnelRockDark: '#4d545e',
@@ -557,6 +561,73 @@ function buildTunnelRock(): THREE.BufferGeometry {
   }
 
   return assemble(pieces);
+}
+
+/**
+ * A coin: a struck disc with a raised rim and a numeral on both faces.
+ *
+ * It used to be a bare cylinder, which at this scale read as a yellow tiddlywink
+ * - nothing on it said "money" except the colour. A coin is legible because of
+ * its *edge*: a raised rim catches the key light along a bright arc while the
+ * recessed face stays a step darker, and that contrast is what the eye reads as
+ * struck metal rather than a painted counter.
+ *
+ * The numeral goes on both faces because the disc spins, and a mark on one side
+ * would strobe. Kept to a stem and a foot: at the size a coin occupies on a
+ * phone, anything finer is a smudge, and a smudge reads worse than a clean bar.
+ *
+ * Segment counts are deliberately low. This geometry is instanced across every
+ * coin on screen, so its vertex count is multiplied by the whole visible field -
+ * the one place in this file where a few extra faces are not free.
+ */
+function buildCoin(): THREE.BufferGeometry {
+  const r = TUNING.coins.radius;
+  // Local +Y is the disc's axis, which the renderer tips towards the camera, so
+  // the face lies in local XZ: X reads across the coin and Z reads down it.
+  // Face half-thickness plus half the numeral's, so the mark sits *in* the
+  // recess and finishes flush with the rim rather than standing over it.
+  const faceY = 0.065;
+
+  const pieces: Piece[] = [
+    // The rim: wider *and* thicker than the face, so it stands proud on both
+    // sides. Both parts matter - a rim that is merely wider is a flat disc with
+    // a stripe on it, and the whole read comes from the edge catching the key
+    // light along a bright arc while the face behind it stays a step down.
+    {
+      geometry: new THREE.CylinderGeometry(r, r, 0.16, 12),
+      color: COLORS.coinRim,
+    },
+    // The recessed face, a step brighter than the rim standing around it.
+    {
+      geometry: new THREE.CylinderGeometry(r * 0.78, r * 0.78, 0.1, 12),
+      color: COLORS.coinFace,
+    },
+  ];
+
+  for (const side of [-1, 1] as const) {
+    // Stem of the numeral.
+    pieces.push({
+      geometry: new THREE.BoxGeometry(r * 0.14, 0.03, r * 0.62),
+      color: COLORS.coinMark,
+      position: [0, side * faceY, 0],
+    });
+    // Foot, which is what stops the stem reading as a tally mark.
+    pieces.push({
+      geometry: new THREE.BoxGeometry(r * 0.44, 0.03, r * 0.14),
+      color: COLORS.coinMark,
+      position: [0, side * faceY, r * 0.31],
+    });
+  }
+
+  return assemble(pieces);
+}
+
+let coinCache: THREE.BufferGeometry | null = null;
+
+/** Built once and shared: every coin in the world is the same disc. */
+export function coinGeometry(): THREE.BufferGeometry {
+  coinCache ??= buildCoin();
+  return coinCache;
 }
 
 const PICKUP_COLORS = {

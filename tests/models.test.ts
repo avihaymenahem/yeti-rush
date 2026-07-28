@@ -14,11 +14,13 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '@/game/config/tuning';
 import { OBSTACLE_MODELS, PINE_MODELS } from '@/game/content/models';
 import { OBSTACLE_KINDS, obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import {
+  coinGeometry,
   PROP_BUILDERS,
   propGeometry,
   rampGeometry,
@@ -315,5 +317,52 @@ describe('pine models', () => {
     for (const spec of PINE_MODELS) {
       expect(fittedSize(spec).x / 2).toBeLessThan(5.5 - 2.2 - 0.38);
     }
+  });
+});
+
+/**
+ * The coin.
+ *
+ * Not a prop kind, so it misses the sweep above, but it is instanced across the
+ * whole visible field - which makes it the one geometry in the game whose vertex
+ * count is multiplied by everything on screen.
+ */
+describe('coin geometry', () => {
+  const geometry = coinGeometry();
+
+  it('has a rim standing proud of its face', () => {
+    // The whole read. A coin is legible because of its edge: the rim catches the
+    // key light along a bright arc while the face stays a step down. A rim that
+    // is merely wider than the face is a flat disc with a stripe on it.
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox as THREE.Box3;
+    // The disc's axis is local Y, so rim thickness is the Y extent.
+    expect(box.max.y - box.min.y).toBeGreaterThan(0.12);
+  });
+
+  it('carries more than one tone, so it is not a plain disc', () => {
+    const colours = new Set<string>();
+    const attribute = geometry.getAttribute('color');
+    for (let i = 0; i < attribute.count; i++) {
+      colours.add(
+        `${attribute.getX(i).toFixed(2)},${attribute.getY(i).toFixed(2)},${attribute.getZ(i).toFixed(2)}`,
+      );
+    }
+    expect(colours.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('never reaches past the radius it is collected from', () => {
+    // Art wider than the pickup radius makes a coin look collectable from
+    // further away than it is, which reads as the magnet failing.
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox as THREE.Box3;
+    const reach = Math.max(box.max.x, box.max.z, -box.min.x, -box.min.z);
+    expect(reach).toBeLessThan(TUNING.coins.pickupRadius);
+  });
+
+  it('stays cheap enough to instance across the field', () => {
+    // Multiplied by every visible coin. Thinning the coin economy is what made
+    // a richer disc affordable at all - this bound is what keeps that true.
+    expect(geometry.getAttribute('position').count).toBeLessThan(700);
   });
 });

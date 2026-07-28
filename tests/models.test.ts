@@ -331,13 +331,49 @@ describe('coin geometry', () => {
   const geometry = coinGeometry();
 
   it('has a rim standing proud of its face', () => {
-    // The whole read. A coin is legible because of its edge: the rim catches the
-    // key light along a bright arc while the face stays a step down. A rim that
-    // is merely wider than the face is a flat disc with a stripe on it.
+    /*
+     * The whole read, and asserted geometrically rather than as a thickness.
+     * The rim has to reach *further along the axis* than the field does, or it
+     * is not raised - it is a differently coloured ring, which shares its normal
+     * with the face and shades identically. Three versions failed here: a solid
+     * cylinder that enclosed the face entirely, a chamfer whose widest point was
+     * mid-thickness so the edge went inwards, and a bead that fixed the
+     * direction and made the coin fat.
+     *
+     * Split by radius rather than by colour, so it keeps testing the shape if
+     * the palette is ever retuned.
+     */
+    const positions = geometry.getAttribute('position');
+    let outerReach = 0;
+    let innerReach = 0;
+    let widest = 0;
+
+    for (let i = 0; i < positions.count; i++) {
+      widest = Math.max(widest, Math.hypot(positions.getX(i), positions.getZ(i)));
+    }
+    for (let i = 0; i < positions.count; i++) {
+      const radius = Math.hypot(positions.getX(i), positions.getZ(i));
+      const height = Math.abs(positions.getY(i));
+      if (radius > widest * 0.8) outerReach = Math.max(outerReach, height);
+      else if (radius < widest * 0.5) innerReach = Math.max(innerReach, height);
+    }
+
+    // The rim is the highest thing on the coin - including the numeral, which
+    // is struck *into* the field rather than glued onto it. That margin was
+    // wrong by a tenth of a millimetre on the first attempt, which is precisely
+    // the kind of thing nobody sees and a measurement does.
+    expect(outerReach).toBeGreaterThan(innerReach);
+  });
+
+  it('stays thin, like a coin rather than a puck', () => {
+    // The other half of the same shape. A rim can be made to stand proud by
+    // simply making the whole thing thicker, which is how the bead version went
+    // wrong - raised, and far too fat to read as struck metal.
     geometry.computeBoundingBox();
     const box = geometry.boundingBox as THREE.Box3;
-    // The disc's axis is local Y, so rim thickness is the Y extent.
-    expect(box.max.y - box.min.y).toBeGreaterThan(0.12);
+    const thickness = box.max.y - box.min.y;
+    const diameter = box.max.x - box.min.x;
+    expect(thickness).toBeLessThan(diameter * 0.2);
   });
 
   it('carries more than one tone, so it is not a plain disc', () => {

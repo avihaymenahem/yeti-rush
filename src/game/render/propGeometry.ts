@@ -579,58 +579,82 @@ function buildTunnelRock(): THREE.BufferGeometry {
 }
 
 /**
- * A coin: a struck disc with a raised rim and a numeral on both faces.
+ * A coin: a thin recessed blank inside a rim that stands proud of it.
  *
- * It used to be a bare cylinder, which at this scale read as a yellow tiddlywink
- * - nothing on it said "money" except the colour. A coin is legible because of
- * its *edge*: a raised rim catches the key light along a bright arc while the
- * recessed face stays a step darker, and that contrast is what the eye reads as
- * struck metal rather than a painted counter.
+ * Three attempts got here, and each failure is worth keeping written down.
  *
- * The numeral goes on both faces because the disc spins, and a mark on one side
- * would strobe. Kept to a stem and a foot: at the size a coin occupies on a
- * phone, anything finer is a smudge, and a smudge reads worse than a clean bar.
+ * A wider, thicker cylinder with the face as a second cylinder inside it drew as
+ * one flat disc - a solid cylinder of larger radius simply *encloses* the
+ * smaller one, so the face was never visible at all.
  *
- * Segment counts are deliberately low. This geometry is instanced across every
- * coin on screen, so its vertex count is multiplied by the whole visible field -
- * the one place in this file where a few extra faces are not free.
+ * A chamfer made the coin widest at mid-thickness and tapering *in* to the face,
+ * which is a bevelled washer: the edge goes inwards, exactly backwards from a
+ * struck coin where the rim is the highest thing on it.
+ *
+ * A fat bead fixed the direction and lost the thinness. So: a thin blank, and a
+ * ring around it standing above the field on both sides. The ring is a torus
+ * with a four-segment section, which is deliberate rather than cheap - a
+ * diamond-section ring gives flat shading four distinct facet bands to separate,
+ * so the rim catches the key light on its upper bevel and falls away on the
+ * lower. That gradient is what reads as struck metal; a flat ring shares its
+ * normal with the face and reads as paint.
  */
 function buildCoin(): THREE.BufferGeometry {
   const r = TUNING.coins.radius;
   // Local +Y is the disc's axis, which the renderer tips towards the camera, so
   // the face lies in local XZ: X reads across the coin and Z reads down it.
-  // Face half-thickness plus half the numeral's, so the mark sits *in* the
-  // recess and finishes flush with the rim rather than standing over it.
-  const faceY = 0.065;
+  const bead = r * 0.12;
+  const blank = 0.045;
+  const segments = 12;
 
   const pieces: Piece[] = [
-    // The rim: wider *and* thicker than the face, so it stands proud on both
-    // sides. Both parts matter - a rim that is merely wider is a flat disc with
-    // a stripe on it, and the whole read comes from the edge catching the key
-    // light along a bright arc while the face behind it stays a step down.
+    // The field: thin, and the brightest thing on the coin. Sunk below the rim
+    // on both sides, which is what makes the rim read as raised rather than as
+    // simply a different colour.
     {
-      geometry: new THREE.CylinderGeometry(r, r, 0.16, 12),
-      color: COLORS.coinRim,
-    },
-    // The recessed face, a step brighter than the rim standing around it.
-    {
-      geometry: new THREE.CylinderGeometry(r * 0.78, r * 0.78, 0.1, 12),
+      geometry: new THREE.CylinderGeometry(r - bead, r - bead, blank, segments),
       color: COLORS.coinFace,
+    },
+    // The rim, standing proud of the field on both faces and carrying the
+    // outermost edge of the coin.
+    {
+      geometry: new THREE.TorusGeometry(r - bead, bead, 4, segments),
+      color: COLORS.coinRim,
+      rotation: [Math.PI / 2, 0, 0],
     },
   ];
 
   for (const side of [-1, 1] as const) {
-    // Stem of the numeral.
+    // Struck into the field, sitting below the rim's crest. Sized to read as a
+    // shape at a glance - anything finer is a smudge at the size a coin occupies
+    // on a phone, and a smudge reads worse than a clean bar.
+    // Proud of the field but *below* the rim's crest, which is what makes it a
+    // struck mark rather than something glued on top. The margin is small and
+    // was got wrong by a tenth of a millimetre first time - a test measures it.
+    const y = side * (blank / 2 + 0.004);
     pieces.push({
-      geometry: new THREE.BoxGeometry(r * 0.14, 0.03, r * 0.62),
+      geometry: new THREE.BoxGeometry(r * 0.14, 0.02, r * 0.62),
       color: COLORS.coinMark,
-      position: [0, side * faceY, 0],
+      position: [0, y, 0],
     });
-    // Foot, which is what stops the stem reading as a tally mark.
     pieces.push({
-      geometry: new THREE.BoxGeometry(r * 0.44, 0.03, r * 0.14),
+      geometry: new THREE.BoxGeometry(r * 0.44, 0.02, r * 0.14),
       color: COLORS.coinMark,
-      position: [0, side * faceY, r * 0.31],
+      position: [0, y, r * 0.3],
+    });
+    // The flag. Without it a stem over a foot is a "T" stood on its head rather
+    // than a one, which is what an earlier version actually drew.
+    //
+    // Mirrored for the far face, in position *and* rotation. The stem and foot
+    // are symmetric about the coin's centre line so they read the same from
+    // either side, but the flag is the one asymmetric stroke - copied verbatim
+    // it comes out backwards on the back, which is the only part of the numeral
+    // that can look wrong and therefore the only part that does.
+    pieces.push({
+      geometry: new THREE.BoxGeometry(r * 0.3, 0.02, r * 0.13),
+      color: COLORS.coinMark,
+      position: [side * -r * 0.11, y, -r * 0.21],
+      rotation: [0, side * 0.85, 0],
     });
   }
 

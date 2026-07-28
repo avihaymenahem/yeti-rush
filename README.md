@@ -40,6 +40,7 @@ npm run dev
 | `npm run check` | typecheck + lint + tests (run before calling anything done) |
 | `npm test` | Vitest suite |
 | `npm run build` | Production web bundle into `dist/` |
+| `npm run splash` | Rebuild the launch splash from `assets/splash.png` |
 | `npm run cap:sync` | Build and copy the bundle into the native projects |
 | `npm run cap:android` | Build, sync and launch on a connected Android device |
 
@@ -433,6 +434,25 @@ The grade and vignette are a **DOM overlay, not a post-processing pass**. A
 render-target chain costs an extra full-resolution draw plus the target itself,
 which on a mid-range mobile GPU is a real slice of the frame budget - and the
 compositor gives an identical vignette and warm lift for free.
+
+### The launch splash
+
+`assets/splash.png` is the poster the game launches on, and `npm run splash`
+composes it into the two assets that actually ship: a WebP for the Android
+splash and a smaller one for the web boot screen.
+
+Composed, not resized. The poster is 2:3 and every phone is taller than that, so
+a CENTER\_CROP splash scales it to fill the height and takes a third of the width
+away - which on this poster is most of the title. The generator instead places
+the full-width art at the bottom of a 1:2 canvas and invents the rest as sky,
+which works because the top edge of the art is near-uniform night blue and a
+gradient continuing it upward has no seam. A phone then crops about a tenth of
+the width, and nothing that matters is in it.
+
+The web half is written into `index.html` rather than rendered by React, because
+React is the thing being waited for. It is dismissed on the same first-frame
+signal as the native splash, with a ten-second failsafe so a bundle that throws
+leaves a blank screen rather than a hung poster.
 
 ## Models
 

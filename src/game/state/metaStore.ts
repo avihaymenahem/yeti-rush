@@ -55,6 +55,15 @@ interface MetaStore {
   buySkin: (id: string) => boolean;
   equipSkin: (id: string) => boolean;
   buyUpgrade: (id: PowerUpId) => boolean;
+  /**
+   * Takes coins for something bought mid-run. Returns false and changes
+   * nothing if the wallet cannot cover it.
+   *
+   * Separate from the shop purchases above because it buys nothing durable -
+   * there is no id to record and nothing to own afterwards. It is used for the
+   * revive, which is paid for and then simply gone.
+   */
+  spendCoins: (amount: number) => boolean;
   /** Claims a completed mission's reward. Returns the coins paid, or 0. */
   claimMission: (id: string) => number;
   /** Claims the daily login reward. Returns the coins paid, or 0. */
@@ -191,6 +200,17 @@ export const useMetaStore = create<MetaStore>((set, get) => ({
     if (save.equippedSkin === id) return false;
 
     const next: SaveData = { ...save, equippedSkin: id };
+    set({ save: next });
+    scheduleWrite(next);
+    return true;
+  },
+
+  spendCoins: (amount) => {
+    const { save } = get();
+    const price = Math.max(0, Math.round(amount));
+    if (save.coins < price) return false;
+
+    const next: SaveData = { ...save, coins: save.coins - price };
     set({ save: next });
     scheduleWrite(next);
     return true;

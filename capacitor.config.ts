@@ -14,7 +14,12 @@ const config: CapacitorConfig = {
       // The app hides the splash itself once the first frame has rendered,
       // so the player never sees a blank canvas.
       launchAutoHide: false,
-      backgroundColor: '#5ea3d4',
+      // Night sky at the top of the poster, not the daylight blue the WebView
+      // sits on. Kept in step with SPLASH_BACKGROUND in game/config/visuals.ts.
+      backgroundColor: '#051844',
+      // The poster is composed onto a 1:2 canvas by scripts/generate-splash.mjs
+      // precisely so this crop is harmless; handing over the raw 2:3 art would
+      // take a third of the width, which is most of the title.
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },

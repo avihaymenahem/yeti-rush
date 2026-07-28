@@ -5,6 +5,13 @@
     <color name="skyBlue">#5EA3D4</color>
     <color name="skyBlueDark">#3D7FB0</color>
 
+    <!-- Night sky at the top of the splash poster, sampled from the art itself
+         by scripts/generate-splash.mjs. Not the daylight blue above: the poster
+         is a dusk scene, and the system splash on Android 12+ shows this colour
+         behind the launcher icon before the poster is drawn. Kept in step with
+         SPLASH_BACKGROUND in src/game/config/visuals.ts. -->
+    <color name="splashSky">#051844</color>
+
     <color name="colorPrimary">@color/skyBlue</color>
     <color name="colorPrimaryDark">@color/skyBlueDark</color>
     <color name="colorAccent">#2FA8E0</color>

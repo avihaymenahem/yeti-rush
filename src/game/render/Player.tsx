@@ -20,6 +20,7 @@ import { useMemo, useRef } from 'react';
 import type * as THREE from 'three';
 import { LANES, TUNING } from '@/game/config/tuning';
 import { clamp, clamp01, damp } from '@/game/core/math';
+import { phasesThroughObstacles } from '@/game/content/powerUps';
 import { skinDef } from '@/game/content/skins';
 import { buildYeti, SCARF_LINK_LENGTH, YETI_JOINTS } from '@/game/render/yetiGeometry';
 import { useCastShadows } from '@/game/render/useCastShadows';
@@ -39,6 +40,48 @@ const BOB_WAVELENGTH = 7;
 
 /** Overall size of the figure above the board. Tuned against the collider. */
 const FIGURE_SCALE = 0.92;
+
+/**
+ * How far the rider fades on the ghost board.
+ *
+ * Not to nothing. The player still has to be read at speed - which lane, how
+ * high, mid-carve or not - and a rider you cannot see is a worse power-up than
+ * no power-up. This is enough to say "solid things are going through me".
+ */
+const GHOST_OPACITY = 0.34;
+/** Spectral tint multiplied over the skin's own colours while phasing. */
+const GHOST_TINT = { r: 0.6, g: 0.85, b: 1 };
+/** Seconds-ish smoothing on the fade, so the power-up arrives and leaves. */
+const GHOST_DAMP = 4e-4;
+
+/**
+ * Fades and tints the rider, and stops them casting a shadow.
+ *
+ * The shadow matters more than it sounds. A translucent rider throwing a hard
+ * black shadow across the snow reads as a rendering bug rather than a ghost -
+ * the shadow is the one thing on screen still insisting they are solid.
+ *
+ * `transparent` and `castShadow` are only touched when they actually change.
+ * The first rebuilds the shader program and the second walks the hierarchy, so
+ * both are fine twice per pickup and wasteful sixty times a second.
+ */
+function applyGhost(root: THREE.Object3D, material: THREE.MeshPhongMaterial, amount: number): void {
+  const wantsGhost = amount > 0.001;
+  if (material.transparent !== wantsGhost) {
+    material.transparent = wantsGhost;
+    material.needsUpdate = true;
+    root.traverse((node) => {
+      if ((node as THREE.Mesh).isMesh) node.castShadow = !wantsGhost;
+    });
+  }
+
+  material.opacity = 1 - amount * (1 - GHOST_OPACITY);
+  material.color.setRGB(
+    1 + (GHOST_TINT.r - 1) * amount,
+    1 + (GHOST_TINT.g - 1) * amount,
+    1 + (GHOST_TINT.b - 1) * amount,
+  );
+}
 
 export function Player() {
   // The equipped skin is baked into the vertex colours, so changing it rebuilds
@@ -61,6 +104,8 @@ export function Player() {
   const scarf1Ref = useRef<THREE.Group>(null);
   const scarf2Ref = useRef<THREE.Group>(null);
   const clockRef = useRef(0);
+  /** 0 solid, 1 fully phased. Eased, so the board fades in and out. */
+  const ghostRef = useRef(0);
 
   useFrame((_, delta) => {
     const root = rootRef.current;
@@ -77,6 +122,14 @@ export function Player() {
 
     clockRef.current += delta;
     const { lane, player } = runtime;
+
+    // Eased rather than switched, so the board arriving and expiring are both
+    // moments the player sees rather than a single frame they miss.
+    const ghostTarget = phasesThroughObstacles(runtime.powerUps) ? 1 : 0;
+    const ghost = damp(ghostRef.current, ghostTarget, GHOST_DAMP, delta);
+    // Snapped at the ends, so a settled material stops being written to.
+    ghostRef.current = Math.abs(ghost - ghostTarget) < 0.004 ? ghostTarget : ghost;
+    applyGhost(root, parts.material, ghostRef.current);
 
     const airborne = player.motion === 'airborne';
     const sliding = player.motion === 'sliding';

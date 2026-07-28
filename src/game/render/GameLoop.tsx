@@ -15,21 +15,34 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
 import { TUNING } from '@/game/config/tuning';
+import { FEEDBACK } from '@/game/config/visuals';
 import { POWER_UP_IDS, powerUpDef, type PowerUpTimers } from '@/game/content/powerUps';
 import { gameTimestep } from '@/game/core/gameTimestep';
 import { clamp01 } from '@/game/core/math';
 import { chaserPressure } from '@/game/systems/chaser';
+import { decayFeedback, feedback, punch, resetFeedback } from '@/game/systems/feedback';
+import { isGrounded } from '@/game/systems/player';
+import { applyScreenFlash } from '@/platform/screenFlash';
 import { setMusicIntensity } from '@/platform/music';
 import {
   HUD_PUBLISH_INTERVAL,
   useGameStore,
   type ActivePowerUpView,
 } from '@/game/state/gameStore';
-import { endRun } from '@/game/state/runController';
+import { finishOrOfferRevive } from '@/game/state/runController';
 import { runtime } from '@/game/state/runtime';
 import { tickRun } from '@/game/systems/simulation';
-import { sfxCoin, sfxCrash, sfxPowerDown, sfxPowerUp, sfxRamp, sfxSmash } from '@/platform/audio';
-import { hapticHeavy, hapticMedium } from '@/platform/haptics';
+import {
+  sfxCoin,
+  sfxCrash,
+  sfxLand,
+  sfxNearMiss,
+  sfxPhase,
+  sfxPowerDown,
+  sfxPowerUp,
+  sfxRamp,
+} from '@/platform/audio';
+import { hapticHeavy, hapticLight, hapticMedium } from '@/platform/haptics';
 
 /**
  * Builds the HUD's view of active power-ups. Allocates, but only ten times a
@@ -48,11 +61,20 @@ export function GameLoop() {
   const hudTimerRef = useRef(0);
   const wasAliveRef = useRef(true);
   const lastCoinsRef = useRef(0);
-  const lastSmashedRef = useRef(0);
+  const lastPhasedRef = useRef(0);
   const lastRampsRef = useRef(0);
+  const lastNearMissesRef = useRef(0);
+  // Starts grounded, because the run does. Seeded the other way, the first
+  // frame of every run would land.
+  const wasGroundedRef = useRef(true);
 
   useFrame((_, delta) => {
     gameTimestep.advance(delta, (step) => tickRun(runtime, step));
+
+    // Decayed on the real frame delta rather than the fixed step: this is how
+    // long the player actually looked at the last frame, and the impulse is a
+    // presentation value that never feeds back into the simulation.
+    decayFeedback(feedback, delta);
 
     // Feed the score. Cheap enough to do every frame, and doing it here means
     // the music follows the simulation rather than the render.
@@ -70,15 +92,39 @@ export function GameLoop() {
       wasAliveRef.current = false;
       sfxCrash();
       hapticHeavy();
-      endRun();
+      // The loudest thing this game does, and the only flash in it.
+      punch(feedback, FEEDBACK.crashFlash);
+      applyScreenFlash(feedback.flash);
+      // Not `endRun` directly: the run is only banked once the second
+      // chance has been declined or has timed out.
+      finishOrOfferRevive();
       return;
     }
     if (!wasAliveRef.current && runtime.alive) {
       wasAliveRef.current = true;
       lastCoinsRef.current = 0;
-      lastSmashedRef.current = 0;
+      lastPhasedRef.current = 0;
       lastRampsRef.current = 0;
+      lastNearMissesRef.current = 0;
+      wasGroundedRef.current = true;
+      // A fresh run must not open with the last crash still fading over it.
+      resetFeedback(feedback);
     }
+
+    if (runtime.nearMisses > lastNearMissesRef.current) {
+      lastNearMissesRef.current = runtime.nearMisses;
+      sfxNearMiss();
+    }
+
+    // Touchdown, from a jump, a ramp arc or stepping off a rail. Diffed here
+    // rather than signalled by the simulation because nothing about it changes
+    // the run - it is purely how the landing is presented.
+    const grounded = isGrounded(runtime.player);
+    if (grounded && !wasGroundedRef.current && runtime.running) {
+      sfxLand();
+      hapticLight();
+    }
+    wasGroundedRef.current = grounded;
 
     if (runtime.coins !== lastCoinsRef.current) {
       // One blip per frame however many coins landed in it, so a magnet sweep
@@ -87,9 +133,9 @@ export function GameLoop() {
       lastCoinsRef.current = runtime.coins;
     }
 
-    if (runtime.smashed > lastSmashedRef.current) {
-      lastSmashedRef.current = runtime.smashed;
-      sfxSmash();
+    if (runtime.phased > lastPhasedRef.current) {
+      lastPhasedRef.current = runtime.phased;
+      sfxPhase();
     }
 
     if (runtime.rampLaunches > lastRampsRef.current) {
@@ -109,6 +155,8 @@ export function GameLoop() {
       sfxPowerDown();
     }
 
+    applyScreenFlash(feedback.flash);
+
     hudTimerRef.current += delta;
     if (hudTimerRef.current >= HUD_PUBLISH_INTERVAL) {
       hudTimerRef.current = 0;
@@ -119,6 +167,7 @@ export function GameLoop() {
         multiplier: runtime.multiplier,
         speed: runtime.speed,
         timeRemaining: runtime.timeRemaining,
+        avalanche: runtime.avalancheTimer,
         powerUps: activePowerUpViews(runtime.powerUps),
       });
     }

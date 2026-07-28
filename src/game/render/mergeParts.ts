@@ -102,7 +102,7 @@ export interface GlossSpec {
   shininess: number;
 }
 
-export function vertexColorMaterial(gloss: GlossSpec = GLOSS.prop): THREE.Material {
+export function vertexColorMaterial(gloss: GlossSpec = GLOSS.prop): THREE.MeshPhongMaterial {
   return new THREE.MeshPhongMaterial({
     vertexColors: true,
     flatShading: true,

@@ -7,7 +7,7 @@ import { speedAt } from '@/game/systems/difficulty';
 import { requestLaneChange } from '@/game/systems/lanes';
 import { requestJump, requestSlide } from '@/game/systems/player';
 import { rampArcHeight } from '@/game/systems/ramp';
-import { chaserPressure } from '@/game/systems/chaser';
+import { CHASER, chaserPressure } from '@/game/systems/chaser';
 import {
   CAUGHT_PRESSURE,
   COMBO_PER_STEP,
@@ -34,6 +34,11 @@ function controlledRuntime(): RuntimeState {
   for (const pickup of rt.track.pickups) pickup.active = false;
   rt.track.nextPickupAt = Number.MAX_SAFE_INTEGER;
   rt.track.nextChunkStart = Number.MAX_SAFE_INTEGER;
+  // Avalanches are scheduled by distance and land in the middle of any test
+  // that runs far enough, changing both the speed and whether a trip is fatal.
+  // Suppressed here for the same reason the chunk stream is: these tests stage
+  // one mechanic at a time. `tests/avalanche.test.ts` covers it on its own.
+  rt.nextAvalancheAt = Number.MAX_SAFE_INTEGER;
   return rt;
 }
 
@@ -66,6 +71,20 @@ function placeCoin(
 function run(rt: RuntimeState, seconds: number): void {
   const ticks = Math.round(seconds / STEP);
   for (let i = 0; i < ticks; i++) tickRun(rt, STEP);
+}
+
+/**
+ * Seconds of clean running for the patrol to drop all the way back.
+ *
+ * Derived, never written down. These tests used to say "2.5 seconds" and "6
+ * seconds", which were correct only for one value of `recoverRate` - and when
+ * the patrol was retuned to make being caught actually possible, three of them
+ * failed for describing the old balance rather than the rule. The rule is that
+ * a clean stretch clears the pressure; how long that stretch is belongs to
+ * `CHASER`.
+ */
+function fullRecoverySeconds(): number {
+  return CHASER.stumblePenalty / CHASER.recoverRate;
 }
 
 /** Runs until the player passes `trackZ` or dies. */
@@ -298,9 +317,12 @@ describe('stumbling', () => {
 
   it('is survivable when trips are far enough apart for the patrol to drop back', () => {
     const rt = controlledRuntime();
-    for (let i = 0; i < 3; i++) placeObstacle(rt, 'drift', 1, 60 + i * 120);
+    // Spaced by the recovery itself, at the fastest the run can get, so the
+    // gap stays "long enough" however the patrol is tuned.
+    const gap = TUNING.speed.max * (fullRecoverySeconds() + 1);
+    for (let i = 0; i < 3; i++) placeObstacle(rt, 'drift', 1, 60 + i * gap);
 
-    runPast(rt, 60 + 2 * 120, 60);
+    runPast(rt, 60 + 2 * gap, 120);
 
     expect(rt.alive).toBe(true);
     expect(rt.stumbles).toBe(3);
@@ -321,7 +343,7 @@ describe('stumbling', () => {
     expect(rt.stumbles).toBe(1);
     expect(peakPressure).toBeGreaterThanOrEqual(CAUGHT_PRESSURE);
 
-    run(rt, 2.5);
+    run(rt, fullRecoverySeconds());
     expect(chaserPressure(rt.chaser)).toBeLessThan(CAUGHT_PRESSURE);
   });
 
@@ -331,7 +353,7 @@ describe('stumbling', () => {
     runPast(rt, 40);
     expect(chaserPressure(rt.chaser)).toBeGreaterThan(0);
 
-    run(rt, 6);
+    run(rt, fullRecoverySeconds() + 1);
     expect(chaserPressure(rt.chaser)).toBeCloseTo(0, 6);
     expect(rt.stumbleTimer).toBe(0);
   });
@@ -604,18 +626,48 @@ describe('power-ups in play', () => {
     expect(withMagnet.coins).toBe(1);
   });
 
-  it('avalanche board survives and destroys an obstacle', () => {
+  it('ghost board rides through an obstacle and leaves it standing', () => {
+    /*
+     * The board used to delete the obstacle outright. With no burst or debris
+     * to sell it, a boulder vanishing mid-frame read as a rendering fault, so
+     * now the rock stays exactly where it is and the player goes through it.
+     * `boulder.active` staying true is the whole point of the change.
+     */
     const rt = controlledRuntime();
     rt.powerUps.avalanche = 30;
     const boulder = placeObstacle(rt, 'boulder', 1, 40);
     runPast(rt, 40);
 
     expect(rt.alive).toBe(true);
-    expect(boulder.active).toBe(false);
-    expect(rt.smashed).toBe(1);
+    expect(boulder.active).toBe(true);
+    expect(rt.phased).toBe(1);
   });
 
-  it('avalanche board speeds the run up', () => {
+  it('scores one phase per obstacle, not one per frame', () => {
+    // Nothing deactivates the obstacle any more, so the overlap lasts as many
+    // ticks as it takes to cross it - which at these speeds is several.
+    const rt = controlledRuntime();
+    rt.powerUps.avalanche = 30;
+    placeObstacle(rt, 'chalet', 1, 40);
+    runPast(rt, 40);
+
+    expect(rt.phased).toBe(1);
+  });
+
+  it('does not pay a near-miss bonus for something ridden through', () => {
+    // The gap is deeply negative when the player is inside the obstacle, so
+    // without an exclusion the ghost board would pay a near miss for every
+    // obstacle on the track.
+    const rt = controlledRuntime();
+    rt.powerUps.avalanche = 30;
+    placeObstacle(rt, 'boulder', 1, 40);
+    runPast(rt, 40);
+
+    expect(rt.phased).toBe(1);
+    expect(rt.nearMisses).toBe(0);
+  });
+
+  it('ghost board speeds the run up', () => {
     const normal = controlledRuntime();
     run(normal, 1);
 
@@ -635,7 +687,7 @@ describe('power-ups in play', () => {
 
     expect(rt.alive).toBe(true);
     expect(chalet.active).toBe(true);
-    expect(rt.smashed).toBe(0);
+    expect(rt.phased).toBe(0);
     expect(rt.player.motion).toBe('flying');
   });
 

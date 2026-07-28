@@ -11,7 +11,7 @@ import {
   POWER_UP_IDS,
   powerUpDef,
   scoreMultiplier,
-  smashesObstacles,
+  phasesThroughObstacles,
   speedMultiplier,
   stepPowerUps,
   type PowerUpId,
@@ -107,7 +107,7 @@ describe('modifier queries', () => {
     const timers = createPowerUpTimers();
     expect(coinPickupMultiplier(timers)).toBe(1);
     expect(isInvulnerable(timers)).toBe(false);
-    expect(smashesObstacles(timers)).toBe(false);
+    expect(phasesThroughObstacles(timers)).toBe(false);
     expect(speedMultiplier(timers)).toBe(1);
     expect(scoreMultiplier(timers)).toBe(1);
     expect(allowsDoubleJump(timers)).toBe(false);
@@ -128,20 +128,21 @@ describe('modifier queries', () => {
     expect(coinPickupMultiplier(timers)).toBeGreaterThan(magnetOnly);
   });
 
-  it('makes the avalanche board invulnerable, faster, and destructive', () => {
+  it('makes the ghost board invulnerable, faster, and able to phase', () => {
     const timers = createPowerUpTimers();
     timers.avalanche = 5;
     expect(isInvulnerable(timers)).toBe(true);
-    expect(smashesObstacles(timers)).toBe(true);
+    expect(phasesThroughObstacles(timers)).toBe(true);
     expect(speedMultiplier(timers)).toBeGreaterThan(1);
   });
 
-  it('makes the chairlift safe but not destructive', () => {
+  it('makes the chairlift safe without making it a phase', () => {
     const timers = createPowerUpTimers();
     timers.chairlift = 5;
     expect(isInvulnerable(timers)).toBe(true);
-    // Flying over obstacles should not also demolish them.
-    expect(smashesObstacles(timers)).toBe(false);
+    // Being carried over an obstacle is not riding through one, and must not
+    // pay for it - the player was never anywhere near the thing.
+    expect(phasesThroughObstacles(timers)).toBe(false);
     expect(flightHeight(timers)).toBeGreaterThan(0);
   });
 

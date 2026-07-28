@@ -42,3 +42,18 @@ export async function hideSplash(): Promise<void> {
     console.warn('[shell] splash hide failed', error);
   }
 }
+
+/**
+ * Dismisses the boot poster in index.html - the browser's equivalent of the
+ * native splash, and on the phone the layer underneath it.
+ *
+ * Removed rather than left transparent. It is a full-screen element above the
+ * canvas, and a compositor that has to keep blending it costs frames for the
+ * rest of the session.
+ */
+export function hideBootSplash(): void {
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  boot.classList.add('boot--gone');
+  window.setTimeout(() => boot.remove(), 400);
+}

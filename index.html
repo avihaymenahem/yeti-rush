@@ -12,7 +12,31 @@
     <title>Yeti Rush</title>
   </head>
   <body>
+    <!--
+      Boot poster. Sits above #root until the first rendered frame, which is the
+      web half of what the native splash does on the phone: a WebGL game has a
+      bundle to fetch and a scene to build, and until both are done the page is
+      an empty coloured rectangle.
+
+      Written into the HTML rather than rendered by React on purpose. React is
+      the thing being waited for, so a splash React owns cannot appear until it
+      is no longer needed. The <img> is here for the same reason - the preload
+      scanner finds it while the document is still parsing, so it downloads
+      alongside the bundle instead of behind it.
+    -->
+    <div id="boot" aria-hidden="true">
+      <img src="/splash.webp" alt="" decoding="async" fetchpriority="high" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Last resort. If the bundle throws or WebGL is unavailable the first
+      // frame never arrives, and a splash with no way out is a hung app - the
+      // one failure mode worse than the blank screen this replaces.
+      setTimeout(function () {
+        var boot = document.getElementById('boot');
+        if (boot) boot.classList.add('boot--gone');
+      }, 10000);
+    </script>
   </body>
 </html>

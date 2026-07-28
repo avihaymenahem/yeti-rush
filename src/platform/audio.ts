@@ -265,12 +265,37 @@ export function sfxPowerDown(): void {
   tone({ type: 'square', from: 660, to: 330, duration: 0.22, gain: 0.09 });
 }
 
-export function sfxSmash(): void {
-  noise(0.22, 0.3, 320, 90);
-  tone({ type: 'sawtooth', from: 150, to: 60, duration: 0.2, gain: 0.16 });
+/**
+ * Riding through something solid on the ghost board.
+ *
+ * Replaced a low crunch with debris under it, which was the sound of an impact
+ * that no longer happens - the obstacle is left standing now. Upward-sweeping
+ * noise and a rising sine instead: a thing passing through you rather than
+ * breaking, and quiet, because on a good line these fire in quick succession.
+ */
+export function sfxPhase(): void {
+  noise(0.26, 0.1, 500, 3000);
+  tone({ type: 'sine', from: 320, to: 900, duration: 0.24, gain: 0.08 });
 }
 
 export function sfxCrash(): void {
   noise(0.5, 0.34, 500, 80);
   tone({ type: 'sawtooth', from: 240, to: 50, duration: 0.45, gain: 0.2 });
+}
+
+/**
+ * Air torn past the ear as something is scraped by.
+ *
+ * Noise sweeping *downward* from bright to dull, which is what a fixed object
+ * passing a moving listener actually does. Quiet on purpose: these fire several
+ * times in a dense stretch, and a near miss that announces itself as loudly as
+ * a crash trains the player to read it as one.
+ */
+export function sfxNearMiss(): void {
+  noise(0.16, 0.09, 3200, 700);
+}
+
+/** Board meeting snow. Short, dull and low - weight rather than event. */
+export function sfxLand(): void {
+  noise(0.18, 0.13, 420, 150);
 }

@@ -38,6 +38,26 @@ function PowerUpBar() {
   );
 }
 
+/**
+ * The avalanche warning.
+ *
+ * Loud on purpose. It is the only time in a run when a trip that is normally
+ * survivable ends it, and a rule change the player cannot see is just an unfair
+ * death - the snowmobile filling the mirror behind them says the same thing,
+ * but only if they happen to look.
+ */
+function AvalancheBanner() {
+  const avalanche = useGameStore((state) => state.avalanche);
+  if (avalanche <= 0) return null;
+
+  return (
+    <div className="hud-avalanche" role="status">
+      <span className="hud-avalanche-label">Avalanche · don't fall</span>
+      <span className="hud-avalanche-seconds">{Math.ceil(avalanche)}</span>
+    </div>
+  );
+}
+
 export function Hud() {
   const score = useGameStore((state) => state.score);
   const coins = useGameStore((state) => state.coins);
@@ -48,9 +68,16 @@ export function Hud() {
   return (
     <div className="layer layer-safe layer-passthrough hud">
       <div className="hud-row">
-        <span className="hud-score">{score.toLocaleString()}</span>
+        {/* `key` on the value is what restarts the CSS pop. React reuses the
+            element otherwise, and an animation that is already finished does
+            not replay just because its text changed. */}
+        <span key={score} className="hud-score hud-pop">
+          {score.toLocaleString()}
+        </span>
         <span className="hud-right">
-          <span className="hud-coins">{coins}</span>
+          <span key={coins} className="hud-coins hud-pop">
+            {coins}
+          </span>
           {/* Top-right, away from the thumb that is busy swiping. */}
           <TapButton className="hud-pause" aria-label="Pause" onTap={pauseRun}>
             <Icon icon={NavIcons.pause} size={16} />
@@ -58,6 +85,7 @@ export function Hud() {
         </span>
       </div>
       <div className="hud-distance">{Math.floor(distance)} m</div>
+      <AvalancheBanner />
 
       {timeRemaining !== null && (
         // Turns urgent inside the last ten seconds, which is the only moment

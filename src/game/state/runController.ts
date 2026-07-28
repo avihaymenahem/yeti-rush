@@ -7,6 +7,7 @@
  * drifting apart.
  */
 
+import { TUNING } from '@/game/config/tuning';
 import type { RunStats } from '@/game/content/missions';
 import { DEFAULT_MODE, gameModeDef, seedForMode, type GameModeId } from '@/game/content/modes';
 import { skinDef } from '@/game/content/skins';
@@ -14,7 +15,9 @@ import { gameTimestep } from '@/game/core/gameTimestep';
 import { useGameStore } from '@/game/state/gameStore';
 import { useMetaStore } from '@/game/state/metaStore';
 import { randomSeed, resetRuntime, runtime } from '@/game/state/runtime';
+import { resetChaser } from '@/game/systems/chaser';
 import { localDateKey } from '@/game/systems/dailyCycle';
+import { worldZOf } from '@/game/systems/spawner';
 
 /**
  * Starts a fresh run.
@@ -50,12 +53,109 @@ function runStats(): RunStats & { score: number; mode: string } {
     bestCombo: runtime.bestCombo,
     rampLaunches: runtime.rampLaunches,
     powerUpsCollected: runtime.powerUpsCollected,
-    smashed: runtime.smashed,
+    phased: runtime.phased,
     // One completed run. Mission progress sums this across runs.
     runs: 1,
     score: runtime.score,
     mode: runtime.mode.id,
   };
+}
+
+/**
+ * Coins the next revive of this run would cost.
+ *
+ * Doubling, so the first is a formality and the third is a whole good run's
+ * takings. A flat price would make reviving the obvious move every time, which
+ * is the same as having no death at all.
+ */
+export function revivePrice(revives: number = runtime.revives): number {
+  return Math.round(TUNING.revive.basePrice * Math.pow(TUNING.revive.priceGrowth, revives));
+}
+
+/**
+ * Whether a second chance can be offered for the run that just ended.
+ *
+ * Timing out is not offered either. `timeUp` is the mode's own ending rather
+ * than a mistake, and selling a way past it would make Time Attack a question
+ * of how many coins the player has.
+ */
+export function canRevive(): boolean {
+  if (runtime.deathCause === 'timeUp') return false;
+  if (runtime.revives >= TUNING.revive.maxPerRun) return false;
+  return useMetaStore.getState().save.coins >= revivePrice();
+}
+
+/**
+ * Puts the player back on the track, paid for in coins.
+ *
+ * The run's numbers are kept - that is the entire point - but the combo is not.
+ * A combo is a statement about unbroken riding and it was broken; letting it
+ * survive would make a revive the cheapest way to protect a multiplier rather
+ * than a way to keep going.
+ *
+ * Two protections, and they answer different things. `graceTimer` covers the
+ * obstacle the player is *currently inside*, which no amount of clear track
+ * ahead can help with. `clearUntil` covers the track they are about to reach at
+ * full speed having read none of it - the committed-flight rule again, in its
+ * fifth costume after ramps, rails and tunnels.
+ */
+export function reviveRun(): boolean {
+  if (!canRevive()) return false;
+
+  const price = revivePrice();
+  if (!useMetaStore.getState().spendCoins(price)) return false;
+
+  runtime.revives++;
+  runtime.alive = true;
+  runtime.deathCause = null;
+  runtime.combo = 0;
+  runtime.graceTimer = TUNING.revive.graceSeconds;
+  runtime.stumbleTimer = 0;
+
+  // Whatever killed them is still standing right there, and at these speeds it
+  // is still inside the collision window on the very next tick.
+  for (const obstacle of runtime.track.obstacles) {
+    if (!obstacle.active) continue;
+    if (Math.abs(worldZOf(obstacle.trackZ, runtime.distance)) < TUNING.collision.zWindow) {
+      obstacle.active = false;
+    }
+  }
+  for (const rail of runtime.track.rails) {
+    if (!rail.active) continue;
+    const along = runtime.distance - rail.trackZ;
+    if (along > -TUNING.collision.zWindow && along < rail.length) rail.active = false;
+  }
+
+  runtime.track.clearUntil = Math.max(
+    runtime.track.clearUntil,
+    runtime.distance + runtime.speed * TUNING.revive.clearSeconds,
+  );
+
+  // The patrol backs off as well. Coming back with it already on your shoulder
+  // would mean the next trip ends the run, which is not a second chance.
+  resetChaser(runtime.chaser);
+
+  gameTimestep.reset();
+  runtime.running = true;
+  useGameStore.getState().setDeathCause(null);
+  useGameStore.getState().setPhase('running');
+  return true;
+}
+
+/**
+ * Offers the second chance, or ends the run if there is nothing to offer.
+ *
+ * Nothing is banked here. The run is not over until the offer is declined or
+ * runs out, which is what lets a revived run keep its score.
+ */
+export function finishOrOfferRevive(): void {
+  runtime.running = false;
+
+  if (canRevive()) {
+    useGameStore.getState().setPhase('revive');
+    return;
+  }
+  endRun();
 }
 
 /**
@@ -74,6 +174,7 @@ export function endRun(): void {
     speed: runtime.speed,
     timeRemaining: runtime.timeRemaining,
     // The run is over; nothing is still ticking down.
+    avalanche: 0,
     powerUps: [],
   });
   store.setDeathCause(runtime.deathCause);

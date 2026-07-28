@@ -266,6 +266,37 @@ export const SHADOW = {
 } as const;
 
 /**
+ * How hard the screen reacts to things happening.
+ *
+ * Presentation, which is why it lives here and not in `tuning.ts`. None of it
+ * can change the outcome of a run - the simulation decides that a crash
+ * happened, these numbers only decide what a crash *looks* like. The one
+ * genuinely gameplay-side number in the same area, the gap that counts as a
+ * near miss, is in `tuning.ts` where it belongs, because it pays score.
+ *
+ * **There is no camera shake here, and there must not be.** Shake was tried on
+ * crashes, landings, near misses and patrol pressure, and it was hated on
+ * sight. Worth recording, because shake is the reflex answer to "this moment
+ * needs more impact" and would otherwise be reinvented: on a phone held in two
+ * hands, a camera that moves when the player did not move it reads as the game
+ * malfunctioning rather than as force, and it fights the one thing they are
+ * trying to aim. The flash does the same job without moving anything.
+ */
+export const FEEDBACK = {
+  /** Ending the run, and the only thing that flashes the screen. */
+  crashFlash: 0.55,
+
+  /**
+   * Seconds for the flash to halve. Short: a lingering white veil reads as a
+   * broken renderer rather than as an impact.
+   */
+  flashHalfLife: 0.07,
+
+  /** Below this the impulse is snapped to zero and stops costing anything. */
+  epsilon: 0.002,
+} as const;
+
+/**
  * Saturation applied to colours baked out of imported models.
  *
  * The CC0 packs are authored for a neutral viewer and land muted against this
@@ -281,6 +312,19 @@ export const IMPORT_SATURATION: number = 1.22;
  * that is what fills most of the frame.
  */
 export const CANVAS_BACKGROUND = PALETTE.skyMid;
+
+/**
+ * Behind the launch poster, on both the native splash and the web boot screen.
+ *
+ * Not `CANVAS_BACKGROUND`: the poster is a dusk scene opening on night sky,
+ * while the game itself runs under a pale blue one, so painting the daylight
+ * colour behind the splash is a flash of the wrong sky before the right one.
+ *
+ * Sampled from the top of the art rather than chosen - `scripts/generate-splash.mjs`
+ * writes it to `assets/splash.json`, and `tests/splash.test.ts` fails if this
+ * and the two native declarations of it ever drift apart from the image.
+ */
+export const SPLASH_BACKGROUND = '#051844';
 
 /**
  * Specular response.

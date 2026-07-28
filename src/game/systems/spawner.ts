@@ -41,6 +41,14 @@ export interface ObstacleEntity {
   trackZ: number;
   /** Set once the player has passed it, so a combo is only counted once. */
   passed: boolean;
+  /**
+   * Set once the player has ridden through it on the ghost board.
+   *
+   * Needed because, unlike smashing, phasing leaves the obstacle standing - so
+   * there is nothing to deactivate and the overlap lasts for as many ticks as
+   * it takes to cross. Without this it would score once per frame.
+   */
+  phased: boolean;
 }
 
 export interface CoinEntity {
@@ -146,6 +154,7 @@ export function createSpawner(): SpawnerState {
     lane: 1 as LaneIndex,
     trackZ: 0,
     passed: false,
+    phased: false,
   }));
 
   const coins: CoinEntity[] = Array.from({ length: MAX_COINS }, () => ({
@@ -336,6 +345,7 @@ function layChunk(
     entity.lane = spec.lane;
     entity.trackZ = spec.z;
     entity.passed = false;
+    entity.phased = false;
   }
 
   // Rolled per run, so coins are scattered rather than bolted to every feature.

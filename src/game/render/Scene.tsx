@@ -37,7 +37,6 @@ import { Track } from '@/game/render/Track';
 import { Village } from '@/game/render/Village';
 import { runtime } from '@/game/state/runtime';
 import { cameraDistanceFor } from '@/game/systems/camera';
-import { chaserPressure } from '@/game/systems/chaser';
 
 /**
  * The perf overlay is reached only through this dynamic import, inside a branch
@@ -49,10 +48,15 @@ const PerfOverlay = import.meta.env.DEV
   ? lazy(() => import('@/game/render/PerfOverlay'))
   : null;
 
-/** Extra degrees of field of view at top speed. */
+/**
+ * Extra degrees of field of view at top speed.
+ *
+ * The only thing the camera does that the player did not ask for, now that the
+ * shake is gone. It works where shake did not because it is a *framing* change
+ * rather than a movement: the edges of the frame stretch, nothing the player is
+ * aiming at moves, and it is tied to speed rather than to events.
+ */
 const SPEED_FOV_KICK = 9;
-/** How hard the camera shakes when the patrol is right behind. */
-const PRESSURE_SHAKE = 0.06;
 
 /**
  * Chase camera. It follows the player's lane only partially - a camera locked
@@ -62,10 +66,13 @@ const PRESSURE_SHAKE = 0.06;
  *
  * Field of view widens with speed. That is the cheapest speed cue there is: the
  * edges of the frame stretch as the run accelerates, and it costs nothing.
+ *
+ * It does not shake, for anything, ever. There used to be a rumble that built
+ * as the patrol closed in and a punch on every crash and landing; both are gone
+ * because they were hated, and a camera that moves on its own is the one thing
+ * this rig must not do.
  */
 function CameraRig() {
-  const shakeRef = useRef(0);
-
   // The camera comes from the frame state rather than `useThree` - this rig
   // only ever mutates it imperatively, so there is nothing to subscribe to.
   useFrame(({ camera, size }, delta) => {
@@ -93,14 +100,6 @@ function CameraRig() {
         perspective.updateProjectionMatrix();
       }
     }
-
-    // A rumble that builds as the patrol closes in, so the danger is felt
-    // before it is seen.
-    const pressure = runtime.running ? chaserPressure(runtime.chaser) : 0;
-    shakeRef.current += delta * 34;
-    const shake = pressure * pressure * PRESSURE_SHAKE;
-    camera.position.x += Math.sin(shakeRef.current) * shake;
-    camera.position.y += Math.cos(shakeRef.current * 1.37) * shake;
 
     camera.lookAt(
       runtime.lane.x * TUNING.camera.laneFollow * 0.5,

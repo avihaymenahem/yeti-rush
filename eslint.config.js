@@ -40,4 +40,14 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
   },
+  // Asset build scripts. Node, and reporting what they produced is the point.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: { 'no-console': 'off' },
+  },
 );

@@ -255,6 +255,29 @@ export const TUNING = {
     forgiveness: 0.15,
     /** Only entities within this many units of the player are tested at all. */
     zWindow: 6,
+    /**
+     * Clearance below which passing an obstacle counts as a near miss.
+     *
+     * Measured against the *full* colliders, not the shrunk ones the hit test
+     * uses, so the best near miss of all is one the forgiveness margin saved -
+     * which is the moment worth paying for.
+     *
+     * There is a hard ceiling here and it is not a matter of taste. Adjacent
+     * lanes are 2.2 apart, so a player one lane over clears the widest obstacle
+     * by about 1.2; set this above that and "near miss" comes to mean "was on
+     * the track at the time" and pays out constantly for nothing. `nearMiss`
+     * tests assert the ceiling rather than this number, because the number is
+     * feel and the ceiling is correctness.
+     *
+     * Measured with the headless pilot in `tests/support/autopilot.ts` over 40
+     * seeds: this fires about 4.7 times per kilometre, roughly one every nine
+     * seconds of play. It also sits in a wide flat spot - anything from 0.34 to
+     * 0.7 measured identically - so the exact value is not load-bearing, which
+     * is where a threshold wants to be. Note the pilot commits every jump at a
+     * fixed lead and so clears things by an unnaturally consistent margin; a
+     * human's spread is wider and this will fire somewhat more often for them.
+     */
+    nearMissGap: 0.5,
   },
 
   track: {
@@ -348,11 +371,85 @@ export const TUNING = {
     spinRate: 2.4,
   },
 
+  /**
+   * The avalanche.
+   *
+   * Fifteen seconds, every so often, where the rules change: the patrol is
+   * right on the player's shoulder, so the trip that normally costs a combo
+   * ends the run instead. Nothing about the *track* changes - the solvability
+   * guarantee, the reaction pacing and every protected span are untouched,
+   * which is deliberate. A scripted stretch that also generated its own track
+   * would need its own proof that the track is survivable, and there is no
+   * version of that which is safer than reusing the one already proved.
+   *
+   * So the escalation is entirely in the consequence of a mistake. It costs no
+   * new generation rules and cannot make a run unwinnable - a player who reads
+   * the slope as well during it as before it comes out the other side.
+   */
+  avalanche: {
+    /** Metres before the first one. Long enough to have learnt the controls. */
+    firstAt: 700,
+    /** Metres between them afterwards. */
+    interval: 900,
+    /** Seconds each lasts. */
+    duration: 15,
+    /** World speed multiplier while it is behind you. */
+    speedBoost: 1.12,
+    /** Score for surviving one, before the mode multiplier. */
+    bonus: 600,
+  },
+
+  /**
+   * The second chance.
+   *
+   * Dying on a personal best is exactly when a player stops playing, and every
+   * runner in the genre sells a way past that moment. The price doubling within
+   * a run is what keeps it a decision: the first is cheap enough to always take
+   * and the third costs a good run's whole haul.
+   */
+  revive: {
+    /** Coins for the first revive of a run. */
+    basePrice: 250,
+    /** Each further revive in the same run costs this much more again. */
+    priceGrowth: 2,
+    /** Nobody rides for ever on a wallet. */
+    maxPerRun: 3,
+    /** Seconds the offer stays open before the run is banked. */
+    offerSeconds: 6,
+    /**
+     * Seconds of untouchability after coming back.
+     *
+     * Separate from, and shorter than, the track clearance below. The clearance
+     * is what stops the player being killed by something they never saw; this
+     * is what stops them being killed by the thing they were already inside
+     * when the run ended, which no amount of clear track ahead can help with.
+     */
+    graceSeconds: 1.6,
+    /**
+     * Seconds of clear track laid ahead of a revive.
+     *
+     * The committed-flight rule in a fifth costume. A revived player restarts
+     * inside whatever killed them with no speed lost and nothing read, so the
+     * track ahead has to be as clear as a ramp landing - and for the same
+     * reason. Converted to metres at the live speed, never a fixed distance,
+     * because the whole point is that it is a *reaction* window.
+     */
+    clearSeconds: 1.5,
+  },
+
   scoring: {
     /** Score awarded per world unit travelled. */
     pointsPerUnit: 1,
     /** Score awarded per coin, before multipliers. */
     pointsPerCoin: 10,
+    /**
+     * Score for squeezing past an obstacle inside `collision.nearMissGap`.
+     *
+     * Worth about two coins. Enough that cutting it fine is the better line and
+     * not so much that the optimal play is to aim at things - the run already
+     * ends if the read is wrong, and that is the whole tension being paid for.
+     */
+    pointsPerNearMiss: 20,
     /** Coins added to the persisted wallet per coin picked up. */
     walletPerCoin: 1,
   },

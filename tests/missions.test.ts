@@ -20,7 +20,7 @@ const EMPTY_RUN: RunStats = {
   bestCombo: 0,
   rampLaunches: 0,
   powerUpsCollected: 0,
-  smashed: 0,
+  phased: 0,
   runs: 0,
 };
 
@@ -211,7 +211,7 @@ describe('applyRunToProgress', () => {
       bestCombo: 22,
       rampLaunches: 4,
       powerUpsCollected: 2,
-      smashed: 6,
+      phased: 6,
       runs: 1,
     });
 

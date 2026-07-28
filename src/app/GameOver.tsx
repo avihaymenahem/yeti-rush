@@ -6,6 +6,7 @@
  * Stays a card rather than a full screen: it is a result, not a destination.
  */
 
+import { CountUp } from '@/app/CountUp';
 import { Icon } from '@/app/Icon';
 import { NavIcons } from '@/app/icons';
 import type { Screen } from '@/app/screens';
@@ -52,15 +53,21 @@ export function GameOver({ onNavigate, onHome }: GameOverProps) {
         <dl className="panel-stats">
           <div>
             <dt>Score</dt>
-            <dd>{score.toLocaleString()}</dd>
+            <dd>
+              <CountUp value={score} />
+            </dd>
           </div>
           <div>
             <dt>Distance</dt>
-            <dd>{Math.floor(distance)} m</dd>
+            <dd>
+              <CountUp value={Math.floor(distance)} suffix=" m" />
+            </dd>
           </div>
           <div>
             <dt>Coins</dt>
-            <dd>{coins}</dd>
+            <dd>
+              <CountUp value={coins} />
+            </dd>
           </div>
         </dl>
 

@@ -80,7 +80,9 @@ describe('chaser', () => {
     chaserCloseIn(chaser);
     expect(chaserPressure(chaser)).toBeGreaterThan(afterOne);
 
-    run(chaser, 4);
+    // Long enough to undo both trips, derived rather than guessed - a literal
+    // here silently encodes whatever `recoverRate` happened to be that week.
+    run(chaser, (2 * CHASER.stumblePenalty) / CHASER.recoverRate);
     expect(chaserPressure(chaser)).toBeLessThan(afterOne);
   });
 

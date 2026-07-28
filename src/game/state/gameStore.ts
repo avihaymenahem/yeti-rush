@@ -11,7 +11,13 @@ import { DEFAULT_MODE, type GameModeId } from '@/game/content/modes';
 import type { PowerUpId } from '@/game/content/powerUps';
 import type { DeathCause } from '@/game/state/runtime';
 
-export type Phase = 'boot' | 'menu' | 'running' | 'paused' | 'gameover';
+/**
+ * `revive` sits between `running` and `gameover`: the run is over but not yet
+ * banked, and the player is being offered a way out of it. Its own phase rather
+ * than a flag on `gameover`, because everything that reacts to a run ending -
+ * the music, the HUD, the save - must not fire until the offer is resolved.
+ */
+export type Phase = 'boot' | 'menu' | 'running' | 'paused' | 'revive' | 'gameover';
 
 export interface ActivePowerUpView {
   id: PowerUpId;
@@ -29,6 +35,8 @@ export interface HudSnapshot {
   speed: number;
   /** Seconds left in a timed mode, or null when the mode is untimed. */
   timeRemaining: number | null;
+  /** Seconds left of the avalanche behind the player. Zero when clear. */
+  avalanche: number;
   powerUps: ActivePowerUpView[];
 }
 
@@ -53,6 +61,7 @@ const EMPTY_HUD: HudSnapshot = {
   multiplier: 1,
   speed: 0,
   timeRemaining: null,
+  avalanche: 0,
   powerUps: [],
 };
 
@@ -97,6 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // The clock is shown to a whole second, so only a tick the player can
       // actually see is worth a re-render.
       Math.ceil(state.timeRemaining ?? 0) === Math.ceil(snapshot.timeRemaining ?? 0) &&
+      Math.ceil(state.avalanche) === Math.ceil(snapshot.avalanche) &&
       powerUpSignature(state.powerUps) === powerUpSignature(snapshot.powerUps)
     ) {
       return;

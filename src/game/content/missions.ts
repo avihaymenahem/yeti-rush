@@ -18,7 +18,7 @@ export interface RunStats {
   bestCombo: number;
   rampLaunches: number;
   powerUpsCollected: number;
-  smashed: number;
+  phased: number;
   runs: number;
 }
 
@@ -71,11 +71,14 @@ export const MISSION_POOL: readonly MissionDef[] = [
     describe: (target) => `Grab ${target} power-ups`,
   },
   {
+    // Id kept as `smash` from when the board destroyed obstacles rather than
+    // phasing through them. It is the key today's mission progress is saved
+    // under, so renaming it would reset any player mid-mission.
     id: 'smash',
-    metric: 'smashed',
+    metric: 'phased',
     targets: [8, 15, 25],
     reward: 270,
-    describe: (target) => `Smash ${target} obstacles on the avalanche board`,
+    describe: (target) => `Ride through ${target} obstacles on the ghost board`,
   },
   {
     id: 'runs',

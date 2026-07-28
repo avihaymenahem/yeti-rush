@@ -149,6 +149,30 @@ softness, and `mapSize` divided by the frustum area is the detail.
 The shadow camera is pinned to the origin and configured once, which is only
 possible because the player never moves. Do not make it follow anything.
 
+## Splash
+
+`assets/splash.png` is the master poster; `npm run splash` builds everything
+that ships from it. Never hand-edit the generated files.
+
+Three things are load-bearing and none are obvious:
+
+- **The art is composed onto a taller canvas, not resized.** It is 2:3 and the
+  splash draws CENTER_CROP, so on a 20:9 phone the raw art loses a third of its
+  width — most of the title. The generator keeps the full width and invents sky
+  above. Only the *top* edge may be extended: it is near-uniform night blue,
+  whereas the bottom carries the board tail and would seam.
+- **`drawable-nodpi`, not `drawable`.** In an unqualified folder Android treats
+  the file as mdpi and pre-scales it by the device density, so a 3x phone would
+  decode a 1200×2400 asset into a 3600×7200 bitmap to draw it smaller.
+- **WebP, not PNG.** As a PNG this poster is ~2.5 MB, a third of the APK, for an
+  image shown for two seconds.
+
+The colour behind it is declared in four places that cannot see each other
+(`SPLASH_BACKGROUND`, `--splash`, `capacitor.config.ts`, `@color/splashSky`) and
+is the dusk *night* sky, not the daylight blue the game runs under. On Android
+12+ the system splash needs `values-v31` too, or it falls back to white.
+`tests/splash.test.ts` fails on any of them drifting.
+
 ## Web demo
 
 Published to <https://avihaymenahem.github.io/yeti-rush/> by

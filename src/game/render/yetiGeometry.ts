@@ -74,7 +74,7 @@ export interface YetiParts {
   arm: THREE.BufferGeometry;
   leg: THREE.BufferGeometry;
   scarf: THREE.BufferGeometry;
-  material: THREE.Material;
+  material: THREE.MeshPhongMaterial;
 }
 
 /** Where each part hangs off its parent, in the parent's local space. */

@@ -28,8 +28,24 @@ export const CHASER = {
   minDistance: 5,
   /** Furthest it is tracked; beyond this it is simply not drawn. */
   maxDistance: 34,
-  /** Metres per second it drops back while the player runs clean. */
-  recoverRate: 5.5,
+  /**
+   * Metres per second it drops back while the player runs clean.
+   *
+   * This was 5.5, which shook a trip off in two seconds and is the reason
+   * nobody was ever caught even after the fatal threshold was fixed. It is not
+   * a free choice: the danger window can only ever be as long as the recovery,
+   * because the patrol is lethal for whatever part of it lies above the
+   * threshold. Even a threshold of zero - "any pressure at all is fatal" -
+   * cannot stretch a two-second recovery past two seconds, so this is the knob
+   * that had to move and `CAUGHT_PRESSURE` was never going to be enough alone.
+   *
+   * Measured with the clumsy pilot in `tests/support/autopilot.ts`, 30 seeds:
+   * at 5.5 and 2.5 nobody is ever caught. At 1.2 a player fluffing every second
+   * jump is caught in 5 runs of 30, every third jump in 2 of 30, and every
+   * fifth jump in none at all. That curve is the mechanic - repeated sloppiness
+   * is punished and a single mistake is not.
+   */
+  recoverRate: 1.2,
   /** Metres it jumps forward on a stumble. */
   stumblePenalty: 11,
   /** It is only drawn once this close. */
@@ -57,9 +73,25 @@ export function chaserCloseIn(chaser: ChaserState): void {
 /**
  * @param gripScale - the equipped board's grip stat. Above 1 shakes the patrol
  *        off faster, which is what makes a forgiving board forgiving.
+ * @param recovering - false while the player is still picking themselves up.
+ *        Ground is not made back during a stumble: the player is down to a
+ *        fraction of their speed and the patrol is not, so dropping back then
+ *        is the one thing that cannot be happening.
+ *
+ *        This is what makes the danger window a usable width rather than what
+ *        makes it exist - see `CAUGHT_PRESSURE`, which is the half that was
+ *        actually broken. Contacts are ignored for the whole of
+ *        `stumble.duration`, and letting the patrol recover through that window
+ *        spends most of the grace period before the player can act on it: 1.3 s
+ *        of real danger instead of the 2 s the mechanic is written around.
  */
-export function stepChaser(chaser: ChaserState, dt: number, gripScale = 1): void {
-  if (chaser.distance < CHASER.restingDistance) {
+export function stepChaser(
+  chaser: ChaserState,
+  dt: number,
+  gripScale = 1,
+  recovering = true,
+): void {
+  if (recovering && chaser.distance < CHASER.restingDistance) {
     chaser.distance = Math.min(
       CHASER.restingDistance,
       chaser.distance + CHASER.recoverRate * Math.max(0, gripScale) * dt,

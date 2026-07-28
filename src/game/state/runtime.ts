@@ -8,7 +8,7 @@
  * (see `@/game/state/gameStore`).
  */
 
-import { CENTRE_LANE } from '@/game/config/tuning';
+import { CENTRE_LANE, TUNING } from '@/game/config/tuning';
 import {
   clearPowerUpTimers,
   createPowerUpTimers,
@@ -62,10 +62,35 @@ export interface RuntimeState {
   rampLaunches: number;
   /** Rails ridden this run. Counts mounts, not distance grinded. */
   railGrinds: number;
-  /** Obstacles destroyed by the avalanche board. */
-  smashed: number;
+  /** Obstacles ridden straight through on the ghost board. */
+  phased: number;
+  /**
+   * Obstacles squeezed past inside `collision.nearMissGap`.
+   *
+   * Counted in the simulation rather than the renderer because it pays score,
+   * so it has to be identical for a given seed and input sequence whether or
+   * not anything was drawn.
+   */
+  nearMisses: number;
   /** Times the player tripped and recovered this run. */
   stumbles: number;
+  /** Revives bought this run. Drives the escalating price. */
+  revives: number;
+  /** Seconds left of the avalanche behind the player. Zero when clear. */
+  avalancheTimer: number;
+  /** Metres at which the next avalanche starts. */
+  nextAvalancheAt: number;
+  /** Avalanches outrun this run. Pays a bonus each and drives a mission. */
+  avalanchesSurvived: number;
+  /**
+   * Seconds of untouchability left after a revive.
+   *
+   * Deliberately not a power-up timer. A power-up is something the player
+   * picked up and can see draining in the HUD; this is a debt the game owes for
+   * putting them back on the track inside an obstacle, and it must not show up
+   * as a fourth icon or be extendable by anything.
+   */
+  graceTimer: number;
   /** Seconds left of the current stumble recovery. Zero when running clean. */
   stumbleTimer: number;
 
@@ -127,8 +152,14 @@ function createRuntimeState(seed: number): RuntimeState {
     multiplier: 1,
     rampLaunches: 0,
     railGrinds: 0,
-    smashed: 0,
+    phased: 0,
+    nearMisses: 0,
     stumbles: 0,
+    revives: 0,
+    avalancheTimer: 0,
+    nextAvalancheAt: TUNING.avalanche.firstAt,
+    avalanchesSurvived: 0,
+    graceTimer: 0,
     stumbleTimer: 0,
     bestCombo: 0,
     powerUpsCollected: 0,
@@ -182,8 +213,14 @@ export function resetRuntime(
   runtime.multiplier = 1;
   runtime.rampLaunches = 0;
   runtime.railGrinds = 0;
-  runtime.smashed = 0;
+  runtime.phased = 0;
+  runtime.nearMisses = 0;
   runtime.stumbles = 0;
+  runtime.revives = 0;
+  runtime.avalancheTimer = 0;
+  runtime.nextAvalancheAt = TUNING.avalanche.firstAt;
+  runtime.avalanchesSurvived = 0;
+  runtime.graceTimer = 0;
   runtime.stumbleTimer = 0;
   runtime.bestCombo = 0;
   runtime.powerUpsCollected = 0;

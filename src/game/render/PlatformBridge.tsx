@@ -16,7 +16,7 @@ import { gameTimestep } from '@/game/core/gameTimestep';
 import { flushMetaSave, useMetaStore } from '@/game/state/metaStore';
 import { onAppStateChange } from '@/platform/appState';
 import { startMusic, stopMusic } from '@/platform/music';
-import { hideSplash, initNativeShell } from '@/platform/shell';
+import { hideBootSplash, hideSplash, initNativeShell } from '@/platform/shell';
 
 export function PlatformBridge() {
   const setFrameloop = useThree((state) => state.setFrameloop);
@@ -52,6 +52,9 @@ export function PlatformBridge() {
     if (splashHiddenRef.current) return;
     splashHiddenRef.current = true;
     void hideSplash();
+    // The web poster goes at the same moment. On a phone it is behind the native
+    // splash and nobody ever sees it; in a browser it is the only one there is.
+    hideBootSplash();
   });
 
   return null;

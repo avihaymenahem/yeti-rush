@@ -19,6 +19,7 @@ import { Hud } from '@/app/Hud';
 import { InputSurface } from '@/app/InputSurface';
 import { Missions } from '@/app/Missions';
 import { Paused } from '@/app/Paused';
+import { Revive } from '@/app/Revive';
 import type { Screen } from '@/app/screens';
 import { Scores } from '@/app/Scores';
 import { Settings } from '@/app/Settings';
@@ -136,9 +137,10 @@ export function App() {
   const riding = phase === 'running';
   const paused = phase === 'paused';
   const finished = phase === 'gameover';
+  const offeringRevive = phase === 'revive';
   // Home is the resting state: shown whenever the player is neither riding nor
   // looking at a result, and no other screen has been opened.
-  const atHome = !riding && !paused && !finished && screen === 'home';
+  const atHome = !riding && !paused && !finished && !offeringRevive && screen === 'home';
 
   return (
     <>
@@ -186,10 +188,16 @@ export function App() {
       {/* Grade and vignette, composited rather than rendered. */}
       <div className="grade" aria-hidden="true" />
 
+      {/* Impact flash. Rendered once and never re-rendered - its opacity is
+          driven from the frame loop through `platform/screenFlash`, because a
+          value that changes every frame must not go through React. */}
+      <div className="flash" id="flash" aria-hidden="true" />
+
       <InputSurface onGesture={handleGesture} />
 
       {riding && <Hud />}
       {paused && <Paused onHome={goHome} />}
+      {offeringRevive && <Revive />}
       {atHome && <Home onNavigate={navigate} />}
       {finished && screen === 'home' && <GameOver onNavigate={navigate} onHome={goHome} />}
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Android 12 replaced the launch window background with a system-drawn
+      splash: the launcher icon centred on `windowSplashScreenBackground`. It
+      ignores the `android:background` drawable the base theme sets, and with no
+      colour given it falls back to the AppCompat window background - white.
+
+      So without this the launch was a white flash, then the icon, then a dusk
+      poster. This makes the system splash the same night blue the poster opens
+      on, which is the whole sequence's first frame.
+
+      Overriding the style wholesale rather than adding to it, because a
+      qualified `values-v31` copy replaces the base one; every item the base
+      theme sets has to be repeated here.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">@color/splashSky</item>
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

@@ -30,12 +30,23 @@ export const POWER_UPS = {
   },
 
   /**
-   * Avalanche board: invincible, faster, and obstacles are smashed through
+   * Ghost board: invincible, faster, and obstacles are passed straight through
    * rather than dodged. The power fantasy one.
+   *
+   * This used to smash them, and the obstacle simply blinked out of existence -
+   * a boulder the size of a car deleted mid-frame with no burst, no debris and
+   * no impact. Without that art the smash read as a rendering fault rather than
+   * a power, and building the art is a much larger job than changing what the
+   * power does. Phasing through needs no impact moment by definition: the rock
+   * is still there, still solid, and the player is briefly not.
+   *
+   * The id stays `avalanche` deliberately. It is the key shop upgrade levels
+   * are persisted under, so renaming it would quietly wipe every player's
+   * purchased upgrades on their next launch.
    */
   avalanche: {
     id: 'avalanche',
-    label: 'Avalanche Board',
+    label: 'Ghost Board',
     duration: 6,
     color: '#5ec8f2',
     weight: 6,
@@ -145,8 +156,15 @@ export function isInvulnerable(timers: PowerUpTimers): boolean {
   return isActive(timers, 'avalanche') || isActive(timers, 'chairlift');
 }
 
-/** True when the player smashes obstacles instead of passing through them. */
-export function smashesObstacles(timers: PowerUpTimers): boolean {
+/**
+ * True when the player rides straight through obstacles, leaving them standing.
+ *
+ * Narrower than `isInvulnerable`, and the two are not interchangeable. Flying
+ * over a chalet on the chairlift is also survivable, but the player is nowhere
+ * near it - so it earns nothing and is not a phase. This is specifically "you
+ * went through the solid thing", which is what gets paid for.
+ */
+export function phasesThroughObstacles(timers: PowerUpTimers): boolean {
   return isActive(timers, 'avalanche');
 }
 

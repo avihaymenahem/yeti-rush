@@ -9,6 +9,9 @@
   /* Mid-sky. Kept in step with PALETTE.skyMid in game/config/visuals.ts, and
      with the Android splash colour, so launch has no colour flash. */
   --sky: #5ea3d4;
+  /* Night sky at the top of the splash poster. Kept in step with
+     SPLASH_BACKGROUND in game/config/visuals.ts and @color/splashSky. */
+  --splash: #051844;
   --snow: #fdf3e4;
   --ink: #16283a;
   --accent: #2fa8e0;
@@ -57,6 +60,45 @@ canvas {
 }
 
 /*
+ * Boot poster, above everything until the first frame is on screen.
+ *
+ * The colour is painted by the element itself so the very first paint is
+ * already the right one - the poster arrives a moment later and lands on the
+ * same night sky it opens with, so there is no flash between them.
+ */
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--splash);
+  pointer-events: none;
+  transition: opacity 320ms ease-out;
+}
+
+#boot img {
+  width: 100%;
+  height: 100%;
+  /* The poster canvas is 1:2, near enough to a phone that filling the screen
+     costs only the outer tenth of the width. */
+  object-fit: cover;
+}
+
+/*
+ * A landscape window is nothing like the poster's shape, so filling it would
+ * blow up a narrow vertical strip. Show the whole poster on the night sky
+ * instead - it is a desktop browser, where there is no launch splash to match.
+ */
+@media (orientation: landscape) {
+  #boot img {
+    object-fit: contain;
+  }
+}
+
+.boot--gone {
+  opacity: 0;
+}
+
+/*
  * Colour grade and vignette.
  *
  * Done as a DOM overlay rather than a fullscreen shader pass. A render-target
@@ -92,6 +134,137 @@ canvas {
     rgba(120, 170, 210, 0) 60%
   );
   mix-blend-mode: soft-light;
+}
+
+/*
+ * Impact flash.
+ *
+ * Above the HUD, because the thing it is reacting to happened to the player and
+ * not to the scoreboard, and below the boot poster. Opacity is written from the
+ * frame loop; nothing here animates it, since a CSS transition would fight the
+ * impulse decay for control of the same property.
+ */
+.flash {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0;
+  /* Cool white. A warm flash on a dusk palette reads as an explosion; this
+     reads as snow thrown at the camera, which is what happened. */
+  background: radial-gradient(circle at 50% 55%, #ffffff 0%, #dbeaff 55%, #b7d2f2 100%);
+  /* Promotes it to its own compositor layer, so a fade never repaints the HUD
+     underneath it. */
+  will-change: opacity;
+}
+
+/*
+ * A number that just changed.
+ *
+ * Tiny and quick. The HUD publishes at 10 Hz, so this fires at most ten times a
+ * second and the scale has to settle well inside that or the counter is
+ * permanently mid-bounce. Transform only - animating font-size or colour would
+ * relayout or repaint the row every pickup.
+ */
+@keyframes hud-pop {
+  from {
+    transform: scale(1.18);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.hud-pop {
+  display: inline-block;
+  transform-origin: center;
+  animation: hud-pop 140ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-pop {
+    animation: none;
+  }
+}
+
+/* --- Avalanche --------------------------------------------------------- */
+
+/*
+ * Pulsing, because it is a state and not an event. A static banner is read once
+ * and then stops being noticed, which is the opposite of what is wanted for the
+ * one stretch where a mistake is fatal.
+ */
+@keyframes avalanche-pulse {
+  0%,
+  100% {
+    background: rgba(196, 62, 42, 0.86);
+  }
+  50% {
+    background: rgba(230, 96, 58, 0.94);
+  }
+}
+
+.hud-avalanche {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.4rem 0 0 1.1rem;
+  padding: 0.22rem 0.75rem;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+  animation: avalanche-pulse 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-avalanche {
+    animation: none;
+    background: rgba(196, 62, 42, 0.9);
+  }
+}
+
+.hud-avalanche-seconds {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* --- Revive offer ------------------------------------------------------ */
+
+/*
+ * The offer clock. A bar rather than a numeral: it is read peripherally, which
+ * is all the attention available with four seconds to decide.
+ */
+.revive-clock {
+  overflow: hidden;
+  width: 100%;
+  height: 0.42rem;
+  margin: 0.15rem 0 1rem;
+  border-radius: 999px;
+  background: rgba(22, 40, 58, 0.14);
+}
+
+.revive-clock-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  /* Warm to hot as it empties, so running out looks like running out. */
+  background: linear-gradient(90deg, #f0b429, #f2714b);
+  transform-origin: left center;
+  /* Matches the hundred-millisecond tick, so the bar glides rather than steps. */
+  transition: transform 100ms linear;
+}
+
+.revive-wallet {
+  margin: 0.55rem 0 0.9rem;
+  color: rgba(22, 40, 58, 0.62);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* Full-bleed layer that sits above the canvas and owns all pointer input. */

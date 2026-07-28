@@ -81,7 +81,7 @@ export const UPGRADE_MAX_LEVEL = 3;
 
 /** Coin cost to go from `level` to `level + 1`. */
 export function upgradePrice(level: number): number {
-  const prices = [800, 2200, 5000];
+  const prices = [500, 1350, 3000];
   return prices[Math.max(0, Math.min(prices.length - 1, level))] as number;
 }
 

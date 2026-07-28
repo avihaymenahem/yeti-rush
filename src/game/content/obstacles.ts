@@ -52,6 +52,33 @@ export const OBSTACLES = {
   },
 
   /**
+   * A jib bar: a steel rail set across the piste on low posts.
+   *
+   * Mechanically a jumpable, and that is what the solvability check sees. What
+   * makes it its own thing is that landing *on* it pays - see `crossbarTap` in
+   * `systems/simulation.ts`. Clearing it high is safe and free; clipping the top
+   * of your arc off it is worth coins, which is the whole point of a jib.
+   *
+   * Its span is authored per chunk rather than fixed, so one may cross a single
+   * lane or the whole piste (see `span` in `content/chunks.ts`). A crossbar is
+   * laid as one obstacle per lane it covers, which is what lets every existing
+   * system - solvability, pacing, mirroring, collision - handle it unchanged.
+   *
+   * Sits low. It has to be clearable by an ordinary jump from any point in the
+   * run-up, and the top has to be somewhere an arc can plausibly touch, or
+   * landing on it would be luck rather than timing.
+   */
+  crossbar: {
+    centreY: 0.55,
+    halfWidth: 1.1,
+    halfHeight: 0.55,
+    halfDepth: 0.22,
+    action: 'jump',
+    color: '#9fb0bd',
+    visual: { width: 2.2, height: 1.1, depth: 0.44 },
+  },
+
+  /**
    * Slalom gantry strung across the lane. Slide under it.
    *
    * It extends well above the top of a jump on purpose. An overhead barrier

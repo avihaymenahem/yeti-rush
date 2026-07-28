@@ -20,6 +20,19 @@ export interface ChunkObstacle {
   lane: LaneIndex;
   /** Metres from the start of the chunk. */
   z: number;
+  /**
+   * Lanes covered, counting outward from `lane`. Defaults to one.
+   *
+   * This is how a crossbar gets a length: a span of one crosses a single lane,
+   * a span of three crosses the whole piste. It is expanded into one obstacle
+   * per lane at placement, which is the reason it needs no support anywhere
+   * else - solvability, reaction pacing, mirroring and collision all work on
+   * per-lane obstacles and never learn that spans exist.
+   *
+   * Clamped to the track, so a span running off the edge is shortened rather
+   * than silently dropping the lanes that fell outside.
+   */
+  span?: number;
 }
 
 export interface ChunkCoinRun {
@@ -308,15 +321,22 @@ export const CHUNKS: ChunkTemplate[] = [
     id: 'chalet-hop',
     tier: 1,
     weight: 8,
-    // The log is what makes the ramp a decision. With the house alone, sliding
-    // one lane sideways answered the whole chunk and the coins over the roof
-    // were a gift for nothing. Now going around costs a jump or a second lane
-    // change, and the flight is the clean line - which is what a greedy route
-    // is supposed to be. One lane is always left open, so this is a cost, not a
-    // wall, and the solvability check still never has to know the ramp exists.
+    // The row seals every lane, and the ramp is the way out of it.
+    //
+    // Leaving one lane open - as this did twice - meant a player cruising wide
+    // answered the whole chunk by doing nothing at all, and the coins over the
+    // roof were a gift for standing in the right place. Now the house is
+    // impassable on the ground, one flank needs a jump and the other a slide,
+    // so every route through costs something *except* the flight. That is what
+    // makes a greedy line greedy.
+    //
+    // Still solvable without the ramp, which is what keeps ramps out of the
+    // guarantee: two lanes are clearable by an action, and the check is run as
+    // if the launch pad were not there at all.
     obstacles: [
       { kind: 'chalet', lane: 1, z: 15 },
       { kind: 'log', lane: 0, z: 15 },
+      { kind: 'banner', lane: 2, z: 15 },
     ],
     ramps: [{ lane: 1, z: 4 }],
     coins: [{ lane: 1, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -328,6 +348,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 0, z: 15 },
       { kind: 'log', lane: 1, z: 15 },
+      { kind: 'banner', lane: 2, z: 15 },
     ],
     ramps: [{ lane: 0, z: 4 }],
     coins: [{ lane: 0, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -339,6 +360,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 2, z: 15 },
       { kind: 'log', lane: 1, z: 15 },
+      { kind: 'banner', lane: 0, z: 15 },
     ],
     ramps: [{ lane: 2, z: 4 }],
     coins: [{ lane: 2, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -350,6 +372,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 1, z: 15 },
       { kind: 'chalet', lane: 2, z: 15 },
+      { kind: 'banner', lane: 0, z: 15 },
     ],
     ramps: [{ lane: 1, z: 4 }],
     coins: [{ lane: 1, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -364,6 +387,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 1, z: 15 },
       { kind: 'chalet', lane: 2, z: 15 },
+      { kind: 'log', lane: 0, z: 15 },
     ],
     ramps: [{ lane: 2, z: 4 }],
     coins: [{ lane: 2, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -377,6 +401,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 0, z: 15 },
       { kind: 'chalet', lane: 1, z: 15 },
+      { kind: 'log', lane: 2, z: 15 },
     ],
     ramps: [{ lane: 0, z: 4 }],
     coins: [{ lane: 0, z: 5, count: 9, spacing: 1.8, rampFrom: 4 }],
@@ -391,6 +416,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 0, z: 15 },
       { kind: 'chalet', lane: 2, z: 15 },
+      { kind: 'banner', lane: 1, z: 15 },
     ],
     ramps: [{ lane: 0, z: 4 }],
     coins: [
@@ -405,6 +431,7 @@ export const CHUNKS: ChunkTemplate[] = [
     obstacles: [
       { kind: 'chalet', lane: 0, z: 15 },
       { kind: 'chalet', lane: 2, z: 15 },
+      { kind: 'log', lane: 1, z: 15 },
     ],
     // Both chalets get a launch pad, so the street reads as a street rather
     // than as one ramp and one wall - and it keeps this tier from leaning to
@@ -469,6 +496,53 @@ export const CHUNKS: ChunkTemplate[] = [
     ],
     rails: [{ lane: 1, z: 2 }],
     coins: [{ lane: 1, z: 3, count: 10, spacing: 1.7, railFrom: 2 }],
+  },
+
+  // --- Jib crossbars --------------------------------------------------------
+  // Steel bars set *across* the piste rather than along it. Mechanically a
+  // jumpable - which is exactly what the solvability check sees - but landing on
+  // top instead of clearing it high pays out, so the same obstacle is a hazard
+  // to one player and a trick to another.
+  //
+  // Length is authored per bar via `span`, which is expanded into one obstacle
+  // per lane covered. A single-lane bar leaves two ways round; a full-width one
+  // has to be jumped. Neither needs the generator to know spans exist.
+  {
+    id: 'jib-single',
+    tier: 1,
+    weight: 7,
+    // One lane, so steering past is free and tapping it is a pure choice.
+    obstacles: [{ kind: 'crossbar', lane: 0, z: 12 }],
+    coins: [{ lane: 0, z: 10, count: 5, arc: true }],
+  },
+  {
+    id: 'jib-double',
+    tier: 2,
+    weight: 7,
+    // Two lanes wide: one lane is still open, so this asks whether the coins
+    // over the bar are worth more than the easy line beside it.
+    obstacles: [{ kind: 'crossbar', lane: 0, z: 12, span: 2 }],
+    coins: [{ lane: 1, z: 10, count: 6, arc: true }],
+  },
+  {
+    id: 'jib-full',
+    tier: 2,
+    weight: 6,
+    // The whole piste. A forced jump, and the only question left is whether to
+    // clear it or clip the top for the payout.
+    obstacles: [{ kind: 'crossbar', lane: 0, z: 12, span: 3 }],
+    coins: [{ lane: 1, z: 10, count: 6, arc: true }],
+  },
+  {
+    id: 'jib-stagger',
+    tier: 3,
+    weight: 6,
+    // Two bars of different lengths, far enough apart to be separate decisions.
+    obstacles: [
+      { kind: 'crossbar', lane: 1, z: 5, span: 2 },
+      { kind: 'crossbar', lane: 0, z: 16 },
+    ],
+    coins: [{ lane: 0, z: 4, count: 4, arc: true }],
   },
 
   // --- Tier 3: sustained pressure -------------------------------------------
@@ -551,6 +625,18 @@ export function runwayChunks(): ChunkTemplate[] {
  *
  * Rows where one lane is clear are not forced: steering is always an option.
  */
+/** Every lane an authored obstacle covers, accounting for its span. */
+export function obstacleLanes(obstacle: ChunkObstacle): LaneIndex[] {
+  const span = Math.max(1, Math.round(obstacle.span ?? 1));
+  const lanes: LaneIndex[] = [];
+  for (let step = 0; step < span; step++) {
+    const lane = obstacle.lane + step;
+    if (lane >= LANES.length) break;
+    lanes.push(lane as LaneIndex);
+  }
+  return lanes;
+}
+
 function computeForcedActionRows(chunk: ChunkTemplate): number[] {
   const byRow = new Map<number, ChunkObstacle[]>();
   for (const obstacle of chunk.obstacles) {
@@ -563,7 +649,11 @@ function computeForcedActionRows(chunk: ChunkTemplate): number[] {
 
   const forced: number[] = [];
   for (const row of byRow.values()) {
-    const lanes = new Set(row.map((obstacle) => obstacle.lane));
+    // Spans have to be counted lane by lane here. Read as a single entry, a
+    // crossbar covering the whole piste looks like one blocked lane and the row
+    // is classed as steerable - so the spacing rule that keeps two forced
+    // actions apart would never fire for the one obstacle most likely to need it.
+    const lanes = new Set(row.flatMap(obstacleLanes));
     if (lanes.size < LANES.length) continue; // a lane is open - steer instead
 
     const needsAction = row.some((obstacle) => obstacleDef(obstacle.kind).action !== 'dodge');
@@ -573,14 +663,18 @@ function computeForcedActionRows(chunk: ChunkTemplate): number[] {
   return forced.sort((a, b) => a - b);
 }
 
-/** Static data, so this is computed once per chunk. */
-const forcedRowCache = new Map<string, number[]>();
+/**
+ * Computed once per chunk. Keyed on the template object rather than its id:
+ * two chunks sharing an id would otherwise silently share an answer, which is
+ * only ever a bug and is invisible until one of them is the wrong shape.
+ */
+const forcedRowCache = new WeakMap<ChunkTemplate, number[]>();
 
 export function forcedActionRows(chunk: ChunkTemplate): number[] {
-  let rows = forcedRowCache.get(chunk.id);
+  let rows = forcedRowCache.get(chunk);
   if (!rows) {
     rows = computeForcedActionRows(chunk);
-    forcedRowCache.set(chunk.id, rows);
+    forcedRowCache.set(chunk, rows);
   }
   return rows;
 }
@@ -609,13 +703,13 @@ function computeDecisionRows(chunk: ChunkTemplate): number[] {
 }
 
 /** Static data, so this is computed once per chunk. */
-const decisionRowCache = new Map<string, number[]>();
+const decisionRowCache = new WeakMap<ChunkTemplate, number[]>();
 
 export function decisionRows(chunk: ChunkTemplate): number[] {
-  let rows = decisionRowCache.get(chunk.id);
+  let rows = decisionRowCache.get(chunk);
   if (!rows) {
     rows = computeDecisionRows(chunk);
-    decisionRowCache.set(chunk.id, rows);
+    decisionRowCache.set(chunk, rows);
   }
   return rows;
 }
@@ -677,6 +771,25 @@ export function mirrorLane(lane: LaneIndex): LaneIndex {
   return (LANES.length - 1 - lane) as LaneIndex;
 }
 
+/**
+ * Reflects an authored obstacle, span and all.
+ *
+ * Flipping `lane` alone is wrong the moment spans exist: a two-lane bar
+ * anchored at lane 0 covers lanes 0-1, and naively mirroring its anchor to
+ * lane 2 leaves a span running off the track that clamps back to one lane. The
+ * anchor has to move to the *far* end of the reflected span instead.
+ *
+ * `expandObstacles` sidesteps this by expanding into individual lanes before
+ * mirroring, which needs no such reasoning. This exists for callers that have to
+ * reflect an authored chunk while it is still authored - and to state the rule
+ * once, rather than leaving each of them to rediscover it.
+ */
+export function mirrorObstacle(obstacle: ChunkObstacle): ChunkObstacle {
+  const lanes = obstacleLanes(obstacle);
+  const far = lanes[lanes.length - 1] as LaneIndex;
+  return { ...obstacle, lane: mirrorLane(far), span: lanes.length };
+}
+
 /** Applies {@link mirrorLane} only when `mirror` is set. */
 export function laneOf(lane: LaneIndex, mirror: boolean): LaneIndex {
   return mirror ? mirrorLane(lane) : lane;
@@ -702,11 +815,26 @@ export function expandObstacles(
   startZ: number,
   mirror = false,
 ): PlacedObstacleSpec[] {
-  return chunk.obstacles.map((obstacle) => ({
-    kind: obstacle.kind,
-    lane: laneOf(obstacle.lane, mirror),
-    z: startZ + obstacle.z,
-  }));
+  const placed: PlacedObstacleSpec[] = [];
+
+  for (const obstacle of chunk.obstacles) {
+    const span = Math.max(1, Math.round(obstacle.span ?? 1));
+    // Expanded before mirroring, never after: a reflection maps each covered
+    // lane individually, so a span laid out first comes back correct without
+    // anyone having to reason about which end of it moved.
+    for (let step = 0; step < span; step++) {
+      const lane = obstacle.lane + step;
+      if (lane >= LANES.length) break;
+
+      placed.push({
+        kind: obstacle.kind,
+        lane: laneOf(lane as LaneIndex, mirror),
+        z: startZ + obstacle.z,
+      });
+    }
+  }
+
+  return placed;
 }
 
 /**
@@ -732,12 +860,15 @@ export function expandCoins(
     // from the flight path, so trimming one leaves the back half of the route
     // unrewarded. Only the filler on open track is thinned.
     const onRoute = run.rampFrom !== undefined || run.railFrom !== undefined;
-    const count = onRoute
-      ? run.count
-      : Math.max(1, Math.round(run.count * TUNING.coins.plainRunScale));
+    const scale = onRoute ? TUNING.coins.routeRunScale : TUNING.coins.plainRunScale;
+    const count = Math.max(1, Math.round(run.count * scale));
+    // A route's line has to span the whole flight, so thinning it means
+    // widening the gaps by exactly what was taken out of the count. A plain run
+    // just gets shorter - there is no arc under it to keep covered.
+    const laidSpacing = onRoute ? spacing * (run.count / count) : spacing;
 
     for (let i = 0; i < count; i++) {
-      const localZ = run.z + i * spacing;
+      const localZ = run.z + i * laidSpacing;
 
       let y: number;
       if (run.railFrom !== undefined) {

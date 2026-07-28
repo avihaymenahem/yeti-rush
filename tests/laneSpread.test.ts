@@ -23,6 +23,7 @@ import {
   forcedActionRows,
   minRowGap,
   mirrorLane,
+  mirrorObstacle,
   type ChunkTemplate,
 } from '@/game/content/chunks';
 import { obstacleDef } from '@/game/content/obstacles';
@@ -132,7 +133,11 @@ describe('mirroring is a safe transformation', () => {
     for (const chunk of CHUNKS) {
       const mirrored: ChunkTemplate = {
         ...chunk,
-        obstacles: chunk.obstacles.map((o) => ({ ...o, lane: mirrorLane(o.lane) })),
+        // `mirrorObstacle` rather than flipping the lane: an obstacle spanning
+        // several lanes has to re-anchor to the far end of its reflected span,
+        // or it comes back shorter and the chunk being compared is not the
+        // mirror of the one it claims to be.
+        obstacles: chunk.obstacles.map(mirrorObstacle),
       };
 
       expect(decisionRows(mirrored)).toEqual(decisionRows(chunk));

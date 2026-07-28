@@ -319,6 +319,7 @@ function layChunk(
   chunk: ChunkTemplate,
   startZ: number,
   mirror: boolean,
+  rng: Rng,
 ): void {
   for (const spec of expandObstacles(chunk, startZ, mirror)) {
     const entity = firstInactive(state.obstacles);
@@ -333,8 +334,16 @@ function layChunk(
     entity.passed = false;
   }
 
+  // Rolled per run, so coins are scattered rather than bolted to every feature.
+  // The predicate runs for every authored run whether it survives or not, which
+  // keeps the RNG stream a function of the chunk alone.
+  const coinRuns = chunk.coins.filter((run) => {
+    const onRoute = run.rampFrom !== undefined || run.railFrom !== undefined;
+    return rng.chance(onRoute ? TUNING.coins.routeRunChance : TUNING.coins.plainRunChance);
+  });
+
   const coinSpecs = expandCoins(
-    chunk,
+    { ...chunk, coins: coinRuns },
     startZ,
     TUNING.coins.baseHeight,
     TUNING.coins.arcPeak,
@@ -485,7 +494,7 @@ export function updateSpawner(
 
     // Reflected on a coin toss. Drawn for every chunk, mirrorable or not, so
     // the RNG stream does not depend on which chunk came out of the pick.
-    layChunk(state, chunk, state.nextChunkStart, rng.chance(0.5));
+    layChunk(state, chunk, state.nextChunkStart, rng.chance(0.5), rng);
     state.nextChunkStart += CHUNK_LENGTH;
     laid++;
   }

@@ -21,7 +21,8 @@
  */
 
 import * as THREE from 'three';
-import { TUNING } from '@/game/config/tuning';
+import { LANES, TUNING } from '@/game/config/tuning';
+import { obstacleDef } from '@/game/content/obstacles';
 import { assemble, prism, wedge, type Piece } from '@/game/render/mergeParts';
 
 const COLORS = {
@@ -450,6 +451,7 @@ export function rampGeometry(): THREE.BufferGeometry {
 
 /** Every obstacle kind built in code rather than loaded from a model. */
 export const PROP_BUILDERS = {
+  crossbar: buildCrossbar,
   chalet: buildChalet,
   banner: buildBanner,
   branch: buildBranch,
@@ -483,6 +485,57 @@ export function isPropKind(kind: string): kind is PropKind {
 //
 // Sized to roughly the octahedron they replace, so the pickup radius in
 // `simulation.ts` still matches what is drawn.
+
+/**
+ * A jib crossbar: a steel rail on two posts, spanning one lane.
+ *
+ * Built exactly one lane wide so that instances in adjacent lanes butt together
+ * into one continuous bar - which is what makes an authored span of two or three
+ * read as a single longer rail rather than as separate obstacles that happen to
+ * be in a line. The posts sit inboard of the lane edge for the same reason: a
+ * post on the seam would double up where two segments meet.
+ */
+function buildCrossbar(): THREE.BufferGeometry {
+  const laneWidth = Math.abs(LANES[1] - LANES[0]);
+  const def = obstacleDef('crossbar');
+  const top = def.centreY + def.halfHeight;
+
+  const pieces: Piece[] = [
+    // The bar. Full lane width, so segments meet with no gap.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth, 0.16, 0.34),
+      color: COLORS.railSteel,
+      position: [0, top - 0.08, 0],
+    },
+    // A lit top edge, the same trick the grind rail uses to stop a steel bar
+    // reading as a shadow against the snow.
+    {
+      geometry: new THREE.BoxGeometry(laneWidth, 0.06, 0.24),
+      color: COLORS.railShine,
+      position: [0, top + 0.02, 0],
+    },
+  ];
+
+  for (const side of [-1, 1] as const) {
+    pieces.push({
+      geometry: new THREE.BoxGeometry(0.14, top - 0.08, 0.14),
+      color: COLORS.railPost,
+      position: [side * (laneWidth * 0.32), (top - 0.08) / 2, 0],
+    });
+  }
+
+  // Warm collars at the foot of each post, so the bar's height off the snow is
+  // legible from a distance - the bar alone gives the eye nothing to judge by.
+  for (const side of [-1, 1] as const) {
+    pieces.push({
+      geometry: new THREE.BoxGeometry(0.22, 0.12, 0.22),
+      color: COLORS.rampMark,
+      position: [side * (laneWidth * 0.32), 0.06, 0],
+    });
+  }
+
+  return assemble(pieces);
+}
 
 const PICKUP_COLORS = {
   mug: '#f7f2ea',

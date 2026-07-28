@@ -219,6 +219,32 @@ export const TUNING = {
     centreY: 0.4,
   },
 
+  /**
+   * Jib crossbars: steel rails set across the piste rather than along it.
+   *
+   * Unlike a grind rail there is nothing to ride. The world scrolls along Z, so
+   * a bar perpendicular to it passes underneath in a few hundredths of a second
+   * however fast the run is going - there is no length to travel. What it offers
+   * instead is precision: clear it high and nothing happens, or clip the top of
+   * your arc off it and get paid.
+   */
+  crossbar: {
+    /**
+     * How near the top of the bar the player's feet must be to count as landed
+     * on it, in metres.
+     *
+     * The same reasoning as the grind rail's catch: sized against how far the
+     * player moves vertically in one 60 Hz tick, which at the top of a fall is
+     * about 0.22 m. This leaves a window of a few ticks - tight enough that
+     * clearing the bar cleanly is the safe play and tapping it is a choice.
+     */
+    tapTolerance: 0.4,
+    /** Score for a clean tap. */
+    tapScore: 60,
+    /** Coins for a clean tap, which is what makes it worth the risk. */
+    tapCoins: 12,
+  },
+
   snow: {
     /** Falling flakes. One draw call regardless of this number. */
     count: 900,
@@ -319,7 +345,32 @@ export const TUNING = {
      * nothing but being there. That makes the routes worth more relative to
      * everything else, which is the balance this always should have had.
      */
-    plainRunScale: 0.65,
+    plainRunScale: 0.4,
+    /**
+     * Scales ramp and rail coin lines, with the spacing widened to compensate.
+     *
+     * These runs cannot simply be shortened - their counts are derived from the
+     * flight path, and dropping coins off the end leaves the back half of a
+     * route unrewarded. Stretching the gaps by the same factor keeps the line
+     * tracing the whole arc while laying fewer coins along it, which is the only
+     * way to thin a route without breaking what it is for.
+     */
+    routeRunScale: 0.55,
+    /**
+     * Chance that an authored coin run is actually laid.
+     *
+     * Every obstacle and every house used to come with its own coin line, which
+     * made coins scenery: guaranteed, predictable, and worth nothing to spot
+     * because they were always exactly where the last ones were. Rolling for
+     * each run scatters them, so noticing a line is worth something and an empty
+     * stretch is a real stretch rather than a gap in the pattern.
+     *
+     * Route lines are rolled too, but far less often refused. A ramp or a rail
+     * now costs something to take, and a route that usually pays nothing is a
+     * route nobody has a reason to risk.
+     */
+    plainRunChance: 0.45,
+    routeRunChance: 0.85,
     /** Visual radius. */
     radius: 0.32,
     /** Spin speed in radians/second. */

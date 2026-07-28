@@ -62,6 +62,8 @@ export interface RuntimeState {
   rampLaunches: number;
   /** Rails ridden this run. Counts mounts, not distance grinded. */
   railGrinds: number;
+  /** Crossbars landed on cleanly this run. */
+  crossbarTaps: number;
   /** Obstacles destroyed by the avalanche board. */
   smashed: number;
   /** Times the player tripped and recovered this run. */
@@ -127,6 +129,7 @@ function createRuntimeState(seed: number): RuntimeState {
     multiplier: 1,
     rampLaunches: 0,
     railGrinds: 0,
+    crossbarTaps: 0,
     smashed: 0,
     stumbles: 0,
     stumbleTimer: 0,
@@ -182,6 +185,7 @@ export function resetRuntime(
   runtime.multiplier = 1;
   runtime.rampLaunches = 0;
   runtime.railGrinds = 0;
+  runtime.crossbarTaps = 0;
   runtime.smashed = 0;
   runtime.stumbles = 0;
   runtime.stumbleTimer = 0;

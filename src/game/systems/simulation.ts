@@ -110,6 +110,7 @@ export function tickRun(rt: RuntimeState, dt: number): void {
     writePlayerAabb(rt.player, rt.lane.x, rt.scratch.player);
   }
 
+  triggerCrossbars(rt);
   collideObstacles(rt);
   if (!rt.alive) return;
 
@@ -292,6 +293,52 @@ function collideObstacles(rt: RuntimeState): void {
       obstacle.passed = true;
       rt.combo++;
     }
+  }
+}
+
+/**
+ * Pays out a crossbar landed on from above, and clears it so the collision pass
+ * that follows does not then read the same bar as a crash.
+ *
+ * A separate pass rather than a branch inside the collision test, because the
+ * two are asking opposite questions. Collision asks whether the player's box
+ * *overlaps* the bar - and when your feet are on top of it, it does not. You are
+ * standing on it, not intersecting it. Gating the tap behind an overlap left a
+ * window about one and a half ticks wide, which is not a mechanic, it is a
+ * coin toss.
+ *
+ * Deliberately gives no upward pop, however much a bounce would flatter it. A
+ * pop is airtime, and airtime is a span in which the player can steer but
+ * cannot jump or slide - exactly the committed flight that ramp landings and
+ * rail exits reserve protected track for. Adding a third such span, fired
+ * unpredictably by a *reward* rather than by a route the spawner laid
+ * deliberately, would put obstacles back inside spans nothing had cleared. The
+ * payout is the reward; the arc is left alone.
+ */
+function triggerCrossbars(rt: RuntimeState): void {
+  const { player } = rt;
+
+  // Has to be a descent onto it. Rising into the bar from underneath is a
+  // mistimed jump, and reading that as a trick would reward the wrong instinct.
+  if (player.motion !== 'airborne' || player.vy > 0) return;
+
+  for (const obstacle of rt.track.obstacles) {
+    if (!obstacle.active || obstacle.kind !== 'crossbar') continue;
+    if (rt.lane.targetLane !== obstacle.lane) continue;
+
+    const def = obstacleDef(obstacle.kind);
+    const worldZ = worldZOf(obstacle.trackZ, rt.distance);
+    // A tight window, unlike the six metres collision uses: the bar is a few
+    // centimetres deep and landing on one two metres away is not landing on it.
+    if (Math.abs(worldZ) > def.halfDepth + TUNING.player.halfDepth) continue;
+
+    const top = def.centreY + def.halfHeight;
+    if (Math.abs(player.y - top) > TUNING.crossbar.tapTolerance) continue;
+
+    rt.score += TUNING.crossbar.tapScore;
+    rt.coins += TUNING.crossbar.tapCoins;
+    rt.crossbarTaps++;
+    obstacle.active = false;
   }
 }
 

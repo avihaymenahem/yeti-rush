@@ -283,7 +283,7 @@ export function bailRail(player: PlayerState): void {
 export function stepGrind(
   player: PlayerState,
   distanceAlong: number,
-  length: number = TUNING.rail.length,
+  length: number = TUNING.rail.minLength,
 ): boolean {
   if (player.motion !== 'grinding') return false;
 

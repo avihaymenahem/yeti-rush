@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '@/game/config/tuning';
 import { OBSTACLE_MODELS, PINE_MODELS } from '@/game/content/models';
 import { OBSTACLE_KINDS, obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import {
@@ -224,12 +225,28 @@ describe('procedural props', () => {
     });
 
     it('never reaches a rider in the neighbouring lane', () => {
-      // Not "narrower than a lane": a chalet is a building and is meant to
-      // overhang. What matters is that it never visually covers the space a
-      // player in the next lane occupies, or the lane reads as blocked when it
-      // is not. Lanes are 2.2 apart and the player is 0.38 wide.
-      const reach = Math.max(box.max.x, Math.abs(box.min.x));
-      expect(reach).toBeLessThan(2.2 - 0.38);
+      /*
+       * Not "narrower than a lane": a chalet is a building and is meant to
+       * overhang. What matters is that it never visually covers the space a
+       * player in the next lane occupies, or the lane reads as blocked when it
+       * is not. Lanes are 2.2 apart and the player is 0.38 wide.
+       *
+       * Measured only over the geometry a player can actually reach. Anything
+       * above the top of a jumping player cannot be run into and cannot be
+       * mistaken for a wall - and a tunnel has to roof the lane you ride
+       * through, so forbidding overhead spans outright would forbid roofing a
+       * passage at all. Below that line the rule is exactly as it was.
+       */
+      const reach = TUNING.player.jumpPeakHeight + TUNING.player.halfHeight * 2;
+      const positions = propGeometry(kind).getAttribute('position');
+
+      let widest = 0;
+      for (let i = 0; i < positions.count; i++) {
+        if (positions.getY(i) > reach) continue;
+        widest = Math.max(widest, Math.abs(positions.getX(i)));
+      }
+
+      expect(widest).toBeLessThan(2.2 - 0.38);
     });
 
     it('puts its detail on the face the player actually sees', () => {

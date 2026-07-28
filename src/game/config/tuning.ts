@@ -157,13 +157,22 @@ export const TUNING = {
      */
     height: 0.8,
     /**
-     * Metres from mount to dismount, when a chunk does not say otherwise.
+     * Metres from mount to dismount, rolled per rail from the run's seed.
      *
-     * Authored per rail (`length` in `ChunkRail`), because a two-metre bar and a
-     * twenty-metre one are different propositions - one is a flick, the other is
-     * a commitment - and a library with only one of them has only one idea.
+     * Randomised rather than authored, and long. Hand-picked lengths gave every
+     * rail of a given chunk the same shape for ever, and the ones first written
+     * were far too short to be worth catching - four metres is a seventh of a
+     * second at top speed, which is not a grind, it is a bump. A rail wants to
+     * be held long enough that steering off it early actually costs something.
+     *
+     * A rail may outrun its own chunk, which is fine and handled: the spawner
+     * extends `clearUntil` past the far end, so whatever follows is laid as
+     * clear track rather than as obstacles the rider would meet at bar height.
      */
-    length: 14,
+    minLength: 14,
+    maxLength: 30,
+    /** Metres between the coins laid along a rail. */
+    coinSpacing: 2.2,
     /**
      * How near the bar the player's feet must be to catch it, in metres.
      *
@@ -319,6 +328,20 @@ export const TUNING = {
      */
     plainRunChance: 0.45,
     routeRunChance: 0.85,
+    /**
+     * How far out a magnet visibly reels a coin in, in metres.
+     *
+     * Presentation only - the simulation's pickup radius is untouched. Hot Cocoa
+     * multiplied that radius by six and nothing else, so coins were collected
+     * from nearly seven metres away by silently blinking out of existence: the
+     * most powerful thing in the game and there was no way to tell it was on.
+     *
+     * Set wider than the pickup radius on purpose, and the pull is scaled so a
+     * coin arrives *exactly* as it is collected. Any narrower and coins would
+     * still be halfway across the piste when they vanished, which looks like a
+     * bug rather than a magnet.
+     */
+    magnetVisualRange: 14,
     /** Visual radius. */
     radius: 0.32,
     /** Spin speed in radians/second. */

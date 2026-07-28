@@ -172,9 +172,16 @@ export const SHADOW = {
    * The cost is light bleeding where one caster stands close behind another.
    * On an open slope with sparse trees that case barely arises, which is what
    * makes VSM the right trade here and the wrong one in an interior.
+   *
+   * Widened well past the first setting. `radius` is the *softness* and nothing
+   * else - it spreads the penumbra without lifting the shadow, so a shadow does
+   * not get weaker as it gets softer, which is the trade every other lever here
+   * would have made. Raising it needs `blurSamples` raised with it or the blur
+   * starts to band: the taps stay the same handful while the distance they cover
+   * doubles, and a gradient sampled too coarsely reads as steps.
    */
-  radius: 5,
-  blurSamples: 12,
+  radius: 11,
+  blurSamples: 24,
   /**
    * VSM does not need the depth bias PCF does - it compares distributions
    * rather than a single depth, so the usual acne does not arise and a bias

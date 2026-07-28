@@ -38,13 +38,24 @@ function generate(seed: number, speed: number, tier = 3) {
     updateSpawner(state, distance, tier, rng, speed);
   }
 
-  return state.obstacles
+  const hazards = state.obstacles
     .filter((obstacle) => obstacle.active)
     .map((obstacle) => ({
       lane: obstacle.lane,
       z: obstacle.trackZ,
       action: obstacleDef(obstacle.kind).action,
     }));
+
+  // Rails count as things to react to. They stand in their lane and riding into
+  // one ends the run, so leaving them out measured a shrinking share of what the
+  // player actually has to read - and the more rail chunks the pacing filter
+  // chose at speed, the more of the track this was blind to.
+  for (const rail of state.rails) {
+    if (!rail.active) continue;
+    hazards.push({ lane: rail.lane, z: rail.trackZ, action: 'jump' as const });
+  }
+
+  return hazards;
 }
 
 /** Seconds between consecutive decision rows, at the given speed. */

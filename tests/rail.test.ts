@@ -20,6 +20,9 @@
 import { describe, expect, it } from 'vitest';
 import { TUNING, type LaneIndex } from '@/game/config/tuning';
 import { CHUNKS } from '@/game/content/chunks';
+import { createRng } from '@/game/core/rng';
+import { tierAt } from '@/game/systems/difficulty';
+import { createSpawner, updateSpawner } from '@/game/systems/spawner';
 import { createTestRuntime, type RuntimeState } from '@/game/state/runtime';
 import { requestLaneChange } from '@/game/systems/lanes';
 import {
@@ -341,15 +344,33 @@ describe('authored rails', () => {
     expect(railChunks.length).toBeGreaterThan(0);
   });
 
-  it('come in more than one length', () => {
-    // A library with one length has one idea in it, and the authored `length`
-    // would be a parameter nobody used.
-    const lengths = new Set(
-      railChunks.flatMap((chunk) =>
-        (chunk.rails ?? []).map((rail) => rail.length ?? RAIL.length),
-      ),
-    );
-    expect(lengths.size).toBeGreaterThan(2);
+  it('roll a different length nearly every time', () => {
+    // Lengths are no longer authored. The same chunk has to be a different ride
+    // each time it comes round, or the randomisation is a constant with extra
+    // steps - and the first hand-picked set was far too short to be worth
+    // catching at all.
+    const rng = createRng(9);
+    const spawner = createSpawner();
+    const lengths = new Set<string>();
+
+    for (let distance = 0; distance <= 6000; distance += 10) {
+      updateSpawner(spawner, distance, tierAt(distance), rng);
+      for (const rail of spawner.rails) {
+        if (rail.active) lengths.add(rail.length.toFixed(2));
+      }
+    }
+
+    expect(lengths.size).toBeGreaterThan(6);
+    for (const value of lengths) {
+      expect(Number(value)).toBeGreaterThanOrEqual(RAIL.minLength);
+      expect(Number(value)).toBeLessThanOrEqual(RAIL.maxLength);
+    }
+  });
+
+  it('are long enough to be worth catching', () => {
+    // The complaint that prompted the change: a four-metre bar is a seventh of a
+    // second at top speed, which is a bump rather than a grind.
+    expect(RAIL.minLength / TUNING.speed.max).toBeGreaterThan(0.35);
   });
 
   it('appear in more than one lane', () => {
@@ -358,11 +379,35 @@ describe('authored rails', () => {
   });
 
   it('carry a coin line along the bar', () => {
-    // The payoff. A rail that pays nothing is a hazard with extra steps, and
-    // this one no longer rescues the player from anything to make up for it.
-    for (const chunk of railChunks) {
-      const railed = chunk.coins.filter((run) => run.railFrom !== undefined);
-      expect(railed.length, `${chunk.id} has no coins on its rail`).toBeGreaterThan(0);
+    // The payoff, and it has to follow the rolled length rather than sit beside
+    // it - a line authored to a fixed count would run out halfway along a long
+    // rail and overshoot a short one.
+    const rng = createRng(4);
+    const spawner = createSpawner();
+    let railed = 0;
+    let checked = 0;
+
+    for (let distance = 0; distance <= 6000; distance += 10) {
+      updateSpawner(spawner, distance, tierAt(distance), rng);
+
+      for (const rail of spawner.rails) {
+        if (!rail.active) continue;
+        checked++;
+        const along = spawner.coins.filter(
+          (coin) =>
+            coin.active &&
+            coin.lane === rail.lane &&
+            coin.trackZ >= rail.trackZ &&
+            coin.trackZ <= rail.trackZ + rail.length &&
+            coin.y > TUNING.coins.baseHeight,
+        );
+        if (along.length > 0) railed++;
+      }
     }
+
+    expect(checked).toBeGreaterThan(0);
+    // Rolled like any other route line, so not every rail pays - but a rail
+    // pays nothing else at all, so most of them must.
+    expect(railed / checked).toBeGreaterThan(0.5);
   });
 });

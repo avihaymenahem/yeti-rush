@@ -18,7 +18,6 @@ import {
   expandObstacles,
   firstRowZ,
   forcedActionRows,
-  furthestRailZ,
   furthestRampZ,
   isRunway,
   laneOf,
@@ -30,7 +29,7 @@ import {
 import { worstCaseSpeed } from '@/game/content/skins';
 import { railLandingDistance } from '@/game/systems/rail';
 import { DEFAULT_MIN_ACTION_SECONDS } from '@/game/systems/solvability';
-import type { ObstacleKind } from '@/game/content/obstacles';
+import { obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import { POWER_UP_IDS, powerUpDef, type PowerUpId } from '@/game/content/powerUps';
 import type { Rng } from '@/game/core/rng';
 
@@ -167,7 +166,7 @@ export function createSpawner(): SpawnerState {
     active: false,
     lane: 1 as LaneIndex,
     trackZ: 0,
-    length: TUNING.rail.length,
+    length: TUNING.rail.minLength,
     used: false,
   }));
 
@@ -324,6 +323,7 @@ function layChunk(
   startZ: number,
   mirror: boolean,
   rng: Rng,
+  reactionGap: number,
 ): void {
   for (const spec of expandObstacles(chunk, startZ, mirror)) {
     const entity = firstInactive(state.obstacles);
@@ -342,7 +342,7 @@ function layChunk(
   // The predicate runs for every authored run whether it survives or not, which
   // keeps the RNG stream a function of the chunk alone.
   const coinRuns = chunk.coins.filter((run) => {
-    const onRoute = run.rampFrom !== undefined || run.railFrom !== undefined;
+    const onRoute = run.rampFrom !== undefined;
     return rng.chance(onRoute ? TUNING.coins.routeRunChance : TUNING.coins.plainRunChance);
   });
 
@@ -365,15 +365,44 @@ function layChunk(
     entity.y = spec.y;
   }
 
+  // Rails roll their own length, so the same chunk is a different ride each
+  // time it comes round. `railEnd` tracks the furthest any of them actually
+  // reaches, which an authored value could not - and it is what the landing
+  // protection below has to be measured from.
+  let railEnd: number | null = null;
+
   for (const spec of chunk.rails ?? []) {
     const entity = firstInactive(state.rails);
     if (!entity) break;
 
+    const { minLength, maxLength } = TUNING.rail;
+    const length = rng.range(minLength, maxLength);
+    const lane = laneOf(spec.lane, mirror);
+
     entity.active = true;
-    entity.lane = laneOf(spec.lane, mirror);
+    entity.lane = lane;
     entity.trackZ = startZ + spec.z;
-    entity.length = spec.length ?? TUNING.rail.length;
+    entity.length = length;
     entity.used = false;
+
+    railEnd = Math.max(railEnd ?? -Infinity, spec.z + length);
+
+    // The coin line, laid along the bar rather than authored beside it. Rolled
+    // like any other route line, so a rail is not guaranteed to pay - but far
+    // more often than not, because it is the only thing a rail pays at all.
+    if (!rng.chance(TUNING.coins.routeRunChance)) continue;
+
+    const spacing = TUNING.rail.coinSpacing;
+    const count = Math.max(1, Math.floor(length / spacing));
+    for (let i = 0; i < count; i++) {
+      const coin = firstInactive(state.coins);
+      if (!coin) break;
+
+      coin.active = true;
+      coin.lane = lane;
+      coin.trackZ = entity.trackZ + (i + 0.5) * spacing;
+      coin.y = TUNING.coins.baseHeight + TUNING.rail.height;
+    }
   }
 
   for (const spec of chunk.ramps ?? []) {
@@ -398,9 +427,30 @@ function layChunk(
   // its landing needs exactly the same protection a ramp's does. Leaving this
   // out is what made rails feel like a trap: the reward route ended in an
   // obstacle you were already airborne for.
-  const railZ = furthestRailZ(chunk);
-  if (railZ !== null) {
-    const touchdown = startZ + railZ + RAIL_LANDING_DISTANCE;
+  // A tunnel blinds the player for its whole depth: inside a ten-metre gallery
+  // the roof and walls are between them and whatever is coming, so an obstacle
+  // just past the mouth cannot be seen in time however well the run is being
+  // read. Reported from play as "a boulder right outside a tunnel", and it is
+  // the ramp-landing problem in a third costume - a span the player cannot act
+  // through, followed by track nothing had cleared.
+  //
+  // Measured from the far end of the passage plus one full reaction at the pace
+  // this stretch is being laid for - the same distance the row spacing uses, and
+  // scaled the same way. A fixed worst-case margin would clear as much track at
+  // sixteen units a second as at forty, which quietly cancels the thing that
+  // keeps a fast run playable: the track is supposed to *thin out* as it speeds
+  // up, and over-protecting the slow end flattens that difference away.
+  for (const spec of expandObstacles(chunk, startZ, mirror)) {
+    if (!spec.kind.startsWith('tunnel')) continue;
+    const exit = spec.z + obstacleDef(spec.kind).halfDepth;
+    state.clearUntil = Math.max(state.clearUntil, exit + reactionGap);
+  }
+
+  // A rail may outrun its own chunk. Protecting from its real far end is what
+  // makes that safe: everything up to the dismount plus the fall is laid clear,
+  // so a rider is never carried at bar height into an obstacle nothing checked.
+  if (railEnd !== null) {
+    const touchdown = startZ + railEnd + RAIL_LANDING_DISTANCE;
     state.clearUntil = Math.max(state.clearUntil, touchdown + TUNING.rail.landingClearance);
   }
 
@@ -499,7 +549,7 @@ export function updateSpawner(
 
     // Reflected on a coin toss. Drawn for every chunk, mirrorable or not, so
     // the RNG stream does not depend on which chunk came out of the pick.
-    layChunk(state, chunk, state.nextChunkStart, rng.chance(0.5), rng);
+    layChunk(state, chunk, state.nextChunkStart, rng.chance(0.5), rng, reactionGap);
     state.nextChunkStart += CHUNK_LENGTH;
     laid++;
   }

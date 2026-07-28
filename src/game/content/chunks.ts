@@ -13,7 +13,6 @@
 import { LANES, TUNING, type LaneIndex } from '@/game/config/tuning';
 import { obstacleDef, type ClearAction, type ObstacleKind } from '@/game/content/obstacles';
 import { rampArcHeight } from '@/game/systems/ramp';
-import { railHeight } from '@/game/systems/rail';
 
 export interface ChunkObstacle {
   kind: ObstacleKind;
@@ -53,12 +52,6 @@ export interface ChunkCoinRun {
    * which is what makes flying over a chalet feel rewarded rather than lucky.
    */
   rampFrom?: number;
-  /**
-   * Rides the rail whose near end is at this chunk-relative z, so the coins
-   * climb with it. Same idea as `rampFrom`: the reward has to sit exactly where
-   * the route puts the player, or taking the route feels unrewarded.
-   */
-  railFrom?: number;
 }
 
 export interface ChunkRamp {
@@ -71,15 +64,6 @@ export interface ChunkRail {
   lane: LaneIndex;
   /** Metres from the start of the chunk to the rail's near end. */
   z: number;
-  /**
-   * Metres from mount to dismount. Defaults to `TUNING.rail.length`.
-   *
-   * Authored per rail because a short bar and a long one are different
-   * propositions - one is a flick, the other a commitment you hold while the
-   * track goes by underneath - and a library with only one length has only one
-   * idea in it.
-   */
-  length?: number;
 }
 
 export interface ChunkTemplate {
@@ -458,54 +442,52 @@ export const CHUNKS: ChunkTemplate[] = [
 
   // --- Grind rails ----------------------------------------------------------
   // A level steel bar down the lane, mounted by ollieing onto it. Unlike a ramp
-  // a rail is *not* free: it stands in its lane, so riding into one is a crash
-  // and the solvability check counts it as a jumpable. What it pays is coins
-  // along its length and the score for holding it - a grind, not a lift.
+  // a rail is *not* free: it stands in its lane, so riding into one ends the run
+  // and the solvability check counts it as a jumpable. What it pays is the coin
+  // line the spawner lays along it - a grind, not a lift.
   //
-  // Lengths are authored, and deliberately spread. A four-metre bar is a flick
-  // you either catch or do not; an eighteen-metre one is held while the track
-  // goes by underneath, and steering off it early costs the rest of the line.
+  // No length here. Each rail rolls its own from the run's seed, so the same
+  // chunk is a different proposition every time it appears, and the coins are
+  // laid to match whatever it rolled - which no authored run could have known.
   {
-    id: 'rail-short',
+    id: 'rail-centre',
     tier: 1,
     weight: 8,
-    // z=6 to z=10. Short enough to be a single decision.
-    rails: [{ lane: 1, z: 6, length: 4 }],
+    rails: [{ lane: 1, z: 4 }],
     obstacles: [],
-    coins: [{ lane: 1, z: 6, count: 3, spacing: 1.4, railFrom: 6 }],
+    coins: [],
   },
   {
-    id: 'rail-medium',
+    id: 'rail-wing',
     tier: 1,
     weight: 8,
-    rails: [{ lane: 0, z: 5, length: 9 }],
+    rails: [{ lane: 0, z: 3 }],
     obstacles: [],
-    coins: [{ lane: 0, z: 5, count: 6, spacing: 1.5, railFrom: 5 }],
+    coins: [],
   },
   {
-    id: 'rail-long',
+    id: 'rail-wing-late',
     tier: 2,
     weight: 7,
-    // Most of the chunk. Held, rather than caught.
-    rails: [{ lane: 1, z: 3, length: 16 }],
+    // Starts deeper into the chunk, so the run-up is shorter and the ollie has
+    // to be found rather than waited for.
+    rails: [{ lane: 0, z: 9 }],
     obstacles: [],
-    coins: [{ lane: 1, z: 3, count: 10, spacing: 1.6, railFrom: 3 }],
+    coins: [{ lane: 2, z: 4, count: 4 }],
   },
   {
-    id: 'rail-pair',
+    id: 'rail-choice',
     tier: 3,
     weight: 6,
-    // Two bars in different lanes, so the choice is which one to take rather
-    // than whether to bother.
+    // Two bars in different lanes, so the question is which to take rather than
+    // whether to bother. Both roll their own length, so one is usually the
+    // longer ride and which one changes every time.
     rails: [
-      { lane: 0, z: 4, length: 6 },
-      { lane: 2, z: 12, length: 6 },
+      { lane: 0, z: 4 },
+      { lane: 2, z: 4 },
     ],
     obstacles: [],
-    coins: [
-      { lane: 0, z: 4, count: 4, spacing: 1.5, railFrom: 4 },
-      { lane: 2, z: 12, count: 4, spacing: 1.5, railFrom: 12 },
-    ],
+    coins: [],
   },
 
   // --- Cave tunnels ---------------------------------------------------------
@@ -538,29 +520,6 @@ export const CHUNKS: ChunkTemplate[] = [
       { kind: 'tunnelRock', lane: 2, z: 13 },
     ],
     coins: [{ lane: 1, z: 8, count: 6 }],
-  },
-  {
-    id: 'tunnel-duck',
-    tier: 2,
-    weight: 6,
-    // The low mouth: right lane *and* a slide. Every lane is occupied, so this
-    // is a forced action - the generator spaces it from the last one on its own.
-    obstacles: [
-      { kind: 'tunnelRock', lane: 0, z: 13, span: 2 },
-      { kind: 'tunnelArch', lane: 2, z: 13 },
-    ],
-    coins: [{ lane: 2, z: 16, count: 5 }],
-  },
-  {
-    id: 'tunnel-duck-centre',
-    tier: 3,
-    weight: 6,
-    obstacles: [
-      { kind: 'tunnelRock', lane: 0, z: 13 },
-      { kind: 'tunnelArch', lane: 1, z: 13 },
-      { kind: 'tunnelRock', lane: 2, z: 13 },
-    ],
-    coins: [{ lane: 1, z: 16, count: 5 }],
   },
 
   // --- Tier 3: sustained pressure -------------------------------------------
@@ -793,21 +752,6 @@ export function lastRowZ(chunk: ChunkTemplate): number | null {
   return rows.length > 0 ? (rows[rows.length - 1] as number) : null;
 }
 
-/**
- * The furthest a rail in this chunk *ends*, or null if it has none.
- *
- * The end rather than the start, because what needs protecting is the ground
- * past the dismount - and with lengths authored per rail, the rail that starts
- * latest is not necessarily the one that finishes latest.
- */
-export function furthestRailZ(chunk: ChunkTemplate): number | null {
-  if (!chunk.rails || chunk.rails.length === 0) return null;
-  return chunk.rails.reduce(
-    (furthest, rail) => Math.max(furthest, rail.z + (rail.length ?? TUNING.rail.length)),
-    -Infinity,
-  );
-}
-
 /** The furthest a ramp in this chunk reaches, or null if it has none. */
 export function furthestRampZ(chunk: ChunkTemplate): number | null {
   if (!chunk.ramps || chunk.ramps.length === 0) return null;
@@ -919,7 +863,7 @@ export function expandCoins(
     // A run tracing a ramp arc or a rail keeps every coin: its count is derived
     // from the flight path, so trimming one leaves the back half of the route
     // unrewarded. Only the filler on open track is thinned.
-    const onRoute = run.rampFrom !== undefined || run.railFrom !== undefined;
+    const onRoute = run.rampFrom !== undefined;
     const scale = onRoute ? TUNING.coins.routeRunScale : TUNING.coins.plainRunScale;
     const count = Math.max(1, Math.round(run.count * scale));
     // A route's line has to span the whole flight, so thinning it means
@@ -931,10 +875,7 @@ export function expandCoins(
       const localZ = run.z + i * laidSpacing;
 
       let y: number;
-      if (run.railFrom !== undefined) {
-        // Level with the grind, a little above the bar where the rider is.
-        y = baseHeight + railHeight();
-      } else if (run.rampFrom !== undefined) {
+      if (run.rampFrom !== undefined) {
         // Follow the real ramp flight path, so the coins sit where a launched
         // player actually passes.
         y = baseHeight + rampArcHeight(localZ - run.rampFrom);

@@ -12,8 +12,12 @@ import { describe, expect, it } from 'vitest';
 import { LANES, TUNING, type LaneIndex } from '@/game/config/tuning';
 import { CHUNKS, obstacleLanes } from '@/game/content/chunks';
 import { obstacleDef } from '@/game/content/obstacles';
+import { worstCaseSpeed } from '@/game/content/skins';
+import { createRng } from '@/game/core/rng';
+import { tierAt } from '@/game/systems/difficulty';
+import { createSpawner, updateSpawner } from '@/game/systems/spawner';
 
-const TUNNEL_KINDS = ['tunnelRock', 'tunnelArch'] as const;
+const TUNNEL_KINDS = ['tunnelRock'] as const;
 
 describe('cave tunnels', () => {
   it('wall the piste with something no jump can clear', () => {
@@ -23,11 +27,19 @@ describe('cave tunnels', () => {
     expect(rock.centreY + rock.halfHeight).toBeGreaterThan(TUNING.player.jumpPeakHeight * 1.5);
   });
 
-  it('leave a low mouth that is answered by sliding', () => {
-    const arch = obstacleDef('tunnelArch');
-    expect(arch.action).toBe('slide');
-    // Underside below a standing player, so it cannot simply be run through.
-    expect(arch.centreY - arch.halfHeight).toBeLessThan(TUNING.player.halfHeight * 2);
+  it('leave the way through clear from the snow to above a jump', () => {
+    // Nothing is ducked in a tunnel. The roof over the open lane is part of the
+    // wall's *geometry* rather than an obstacle of its own, so the passage is
+    // clear all the way up - which is what makes this an avalanche gallery
+    // rather than a cave mouth. A low roof and a required slide made it a second
+    // banner wearing a rock texture, and asked the player to answer a tunnel
+    // with the input they use on bunting.
+    const kinds = new Set(
+      CHUNKS.flatMap((chunk) => chunk.obstacles.map((obstacle) => obstacle.kind)),
+    );
+    expect(kinds.has('tunnelRock')).toBe(true);
+    // No obstacle kind stands in a tunnel's open lane at all.
+    expect([...kinds].filter((kind) => kind.startsWith('tunnel'))).toEqual(['tunnelRock']);
   });
 
   const tunnels = CHUNKS.filter((chunk) =>
@@ -77,5 +89,81 @@ describe('cave tunnels', () => {
     }
 
     expect(entrances.size).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * What follows a tunnel.
+ *
+ * Inside a ten-metre gallery the roof and walls are between the player and
+ * whatever is coming, so an obstacle just past the mouth cannot be read in time
+ * however well the run is being played. This is the ramp-landing problem in a
+ * third costume - a span the player cannot act through, followed by track
+ * nothing had cleared - and it is protected the same way.
+ */
+describe('coming out of a tunnel', () => {
+  const REACTION = 0.45;
+
+  function generate(seed: number, totalDistance: number) {
+    const rng = createRng(seed);
+    const spawner = createSpawner();
+    const tunnels = new Map<string, number>();
+    const obstacles = new Map<string, { z: number; kind: string }>();
+
+    for (let distance = 0; distance <= totalDistance; distance += 10) {
+      updateSpawner(spawner, distance, tierAt(distance), rng, worstCaseSpeed(TUNING.speed.max));
+
+      for (const obstacle of spawner.obstacles) {
+        if (!obstacle.active) continue;
+        const key = `${obstacle.trackZ.toFixed(3)}:${obstacle.lane}:${obstacle.kind}`;
+        if (obstacle.kind.startsWith('tunnel')) {
+          tunnels.set(key, obstacle.trackZ + obstacleDef(obstacle.kind).halfDepth);
+        } else {
+          obstacles.set(key, { z: obstacle.trackZ, kind: obstacle.kind });
+        }
+      }
+    }
+
+    return { exits: [...tunnels.values()], obstacles: [...obstacles.values()] };
+  }
+
+  it('leaves clear track for a full reaction past the mouth, across 200 seeds', () => {
+    const clear = REACTION * worstCaseSpeed(TUNING.speed.max);
+    const violations: { seed: number; gap: number; kind: string }[] = [];
+
+    for (let seed = 1; seed <= 200; seed++) {
+      const { exits, obstacles } = generate(seed, 3000);
+
+      for (const exit of exits) {
+        for (const obstacle of obstacles) {
+          if (obstacle.z <= exit || obstacle.z > exit + clear) continue;
+          violations.push({
+            seed,
+            gap: Number((obstacle.z - exit).toFixed(1)),
+            kind: obstacle.kind,
+          });
+        }
+      }
+    }
+
+    expect(violations.slice(0, 8)).toEqual([]);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still puts tunnels on the track at all', () => {
+    // The counterweight. Every bound above is trivially met by a generator that
+    // never lays a tunnel, and the protection works by laying *clear* chunks -
+    // so a bug that suppressed tunnels entirely would look like a pass.
+    let found = 0;
+    for (let seed = 1; seed <= 40; seed++) found += generate(seed, 3000).exits.length;
+    expect(found).toBeGreaterThan(20);
+  });
+
+  it('still lays real obstacles elsewhere', () => {
+    // The other half of the same counterweight: protection that cleared the
+    // whole track would also pass, and would be a different bug entirely.
+    let found = 0;
+    for (let seed = 1; seed <= 20; seed++) found += generate(seed, 3000).obstacles.length;
+    expect(found).toBeGreaterThan(200);
   });
 });

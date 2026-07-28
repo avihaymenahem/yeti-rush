@@ -299,19 +299,25 @@ function generateRailsAndObstacles(
   seed: number,
   totalDistance: number,
   speed: number,
-): { rails: number[]; obstacles: { z: number; kind: string }[] } {
+): { rails: { z: number; end: number }[]; obstacles: { z: number; kind: string }[] } {
   const rng = createRng(seed);
   const spawner = createSpawner();
   resetSpawner(spawner);
 
-  const rails = new Map<string, number>();
+  const rails = new Map<string, { z: number; end: number }>();
   const obstacles = new Map<string, { z: number; kind: string }>();
 
   for (let distance = 0; distance <= totalDistance; distance += 10) {
     updateSpawner(spawner, distance, tierAt(distance), rng, speed);
 
     for (const rail of spawner.rails) {
-      if (rail.active) rails.set(`${rail.trackZ.toFixed(3)}:${rail.lane}`, rail.trackZ);
+      if (!rail.active) continue;
+      // The rolled length, not a constant: since rails randomise, the far end
+      // is a property of the entity and nothing else knows it.
+      rails.set(`${rail.trackZ.toFixed(3)}:${rail.lane}`, {
+        z: rail.trackZ,
+        end: rail.trackZ + rail.length,
+      });
     }
     for (const obstacle of spawner.obstacles) {
       if (!obstacle.active) continue;
@@ -345,14 +351,15 @@ describe('rail landings', () => {
     for (let seed = 1; seed <= 300; seed++) {
       const { rails, obstacles } = generateRailsAndObstacles(seed, 3000, speed);
 
-      for (const railZ of rails) {
-        const exit = railZ + TUNING.rail.length;
+      for (const rail of rails) {
+        const exit = rail.end;
         const touchdown = exit + landing;
         const dangerEnd = touchdown + TUNING.rail.landingClearance;
 
         for (const obstacle of obstacles) {
-          // Obstacles under the rail itself are the point of it - the rider is
-          // carried over them, and `rail.test.ts` checks the clearance.
+          // Only the span past the dismount matters. A level rail carries the
+          // player over nothing, so what is being protected here is the fall at
+          // the end of it and the ground they come down on.
           if (obstacle.z <= exit || obstacle.z > dangerEnd) continue;
           violations.push({
             seed,

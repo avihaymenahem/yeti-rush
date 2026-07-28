@@ -432,7 +432,6 @@ export function rampGeometry(): THREE.BufferGeometry {
 /** Every obstacle kind built in code rather than loaded from a model. */
 export const PROP_BUILDERS = {
   tunnelRock: buildTunnelRock,
-  tunnelArch: buildTunnelArch,
   chalet: buildChalet,
   banner: buildBanner,
   branch: buildBranch,
@@ -524,89 +523,38 @@ function buildTunnelRock(): THREE.BufferGeometry {
     });
   }
 
-  return assemble(pieces);
-}
-
-/**
- * The mouth and roof of the cave: rock overhead with a passage beneath it.
- *
- * The dark is the point. A tunnel that is merely a gap between two rocks reads
- * as a doorway; what makes it a *tunnel* is that the inside is another place,
- * so the walls, roof and back of the passage are all several steps down the
- * value scale from the snow outside, and the roof deepens towards the far end
- * where no light would reach. There is no lighting trick behind this - the
- * shading is baked into vertex colours, which is what keeps the whole thing one
- * instanced draw.
- */
-function buildTunnelArch(): THREE.BufferGeometry {
-  const laneWidth = Math.abs(LANES[1] - LANES[0]);
-  const def = obstacleDef('tunnelArch');
-  const depth = def.halfDepth * 2;
-  const underside = def.centreY - def.halfHeight;
-  const top = def.centreY + def.halfHeight;
-
-  const pieces: Piece[] = [
-    // The lintel over the whole passage.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth, top - underside, depth),
-      color: COLORS.tunnelRock,
-      position: [0, (top + underside) / 2, 0],
-    },
-    // A lit lip at the near edge, which is the thing the player is judging. A
-    // dark edge against a dark opening is unreadable at speed.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.98, 0.14, 0.5),
-      color: COLORS.tunnelLip,
-      position: [0, underside + 0.07, depth / 2 - 0.25],
-    },
-    // A weathered band across the front, so the approach face carries at least
-    // as much detail as the back - `tests/models.test.ts` enforces that, after
-    // the chalet spent months presenting the player with its blank side.
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 0.9, (top - underside) * 0.34, 0.14),
-      color: COLORS.tunnelRockDark,
-      position: [0, underside + (top - underside) * 0.62, depth / 2 - 0.05],
-    },
-    {
-      geometry: new THREE.BoxGeometry(laneWidth * 1.02, 0.16, depth * 0.94),
-      color: COLORS.snow,
-      position: [0, top + 0.08, 0],
-    },
-  ];
-
-  // The passage itself, in three slices from the mouth to the far end, each
-  // darker than the last. Stepping it rather than using one flat colour is what
-  // gives the tunnel depth: the eye reads the gradient as distance.
-  const slices = [
-    { z: depth * 0.32, colour: COLORS.tunnelInner },
-    { z: -depth * 0.02, colour: COLORS.tunnelDeep },
-    { z: -depth * 0.34, colour: COLORS.tunnelDark },
-  ];
-  const sliceDepth = depth * 0.33;
-
-  for (const slice of slices) {
-    // Roof of the passage.
-    pieces.push({
-      geometry: new THREE.BoxGeometry(laneWidth * 0.94, 0.1, sliceDepth),
-      color: slice.colour,
-      position: [0, underside - 0.05, slice.z],
-    });
-    // Side walls, narrow enough to leave the lane clear to ride through.
-    for (const side of [-1, 1] as const) {
-      pieces.push({
-        geometry: new THREE.BoxGeometry(laneWidth * 0.07, underside, sliceDepth),
-        color: slice.colour,
-        position: [side * laneWidth * 0.465, underside / 2, slice.z],
-      });
-    }
-  }
-
-  // The black at the very back, so the passage does not end in daylight.
+  // The gallery roof. Cantilevered a full lane to each side so that whichever
+  // lane is left open is covered, whichever side of the wall it happens to be
+  // on - a one-sided overhang works for half the mirrors and leaves the other
+  // half open to the sky. Where two wall segments stand side by side their roofs
+  // coincide, which is invisible because they are the same colour.
+  //
+  // Geometry only. It belongs to the wall's mesh rather than being an obstacle
+  // of its own, which is exactly what lets the passage be roofed without
+  // anything standing in it - the way through is clear from the snow to well
+  // above the top of a jump, so a tunnel asks for a lane and nothing more.
+  const roofBase = height * 0.86;
   pieces.push({
-    geometry: new THREE.BoxGeometry(laneWidth * 0.86, underside, 0.2),
-    color: COLORS.tunnelDark,
-    position: [0, underside / 2, -depth / 2 + 0.1],
+    geometry: new THREE.BoxGeometry(laneWidth * 3, height * 0.14, depth),
+    color: COLORS.tunnelRock,
+    position: [0, roofBase + height * 0.07, 0],
   });
+
+  // Underside of the roof, stepped through three shades from the mouth to the
+  // far end. The gradient is what the eye reads as depth; a single flat colour
+  // overhead reads as a lid rather than as a passage going somewhere.
+  const slices = [
+    { z: depth * 0.33, colour: COLORS.tunnelInner },
+    { z: 0, colour: COLORS.tunnelDeep },
+    { z: -depth * 0.33, colour: COLORS.tunnelDark },
+  ];
+  for (const slice of slices) {
+    pieces.push({
+      geometry: new THREE.BoxGeometry(laneWidth * 2.96, 0.12, depth * 0.33),
+      color: slice.colour,
+      position: [0, roofBase - 0.06, slice.z],
+    });
+  }
 
   return assemble(pieces);
 }

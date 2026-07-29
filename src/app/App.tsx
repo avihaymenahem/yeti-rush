@@ -20,7 +20,7 @@ import { InputSurface } from '@/app/InputSurface';
 import { Missions } from '@/app/Missions';
 import { Paused } from '@/app/Paused';
 import { Revive } from '@/app/Revive';
-import type { Screen } from '@/app/screens';
+import { backTarget, type Screen } from '@/app/screens';
 import { Scores } from '@/app/Scores';
 import { Settings } from '@/app/Settings';
 import { Shop } from '@/app/Shop';
@@ -30,6 +30,7 @@ import { allowsDoubleJump } from '@/game/content/powerUps';
 import { Scene } from '@/game/render/Scene';
 import { useGameStore } from '@/game/state/gameStore';
 import { useMetaStore } from '@/game/state/metaStore';
+import { pauseRun, returnToMenu } from '@/game/state/runController';
 import { runtime } from '@/game/state/runtime';
 import type { Gesture } from '@/game/systems/input';
 import { requestLaneChange } from '@/game/systems/lanes';
@@ -44,6 +45,7 @@ import {
   unlockAudio,
 } from '@/platform/audio';
 import { hapticLight, hapticMedium, setHapticsEnabled } from '@/platform/haptics';
+import { exitApp, onBackButton } from '@/platform/appState';
 import { setMusicEnabled, startMusic } from '@/platform/music';
 import { BOOT_STEPS, setBootProgress } from '@/platform/shell';
 
@@ -135,6 +137,32 @@ export function App() {
         break;
     }
   }, []);
+
+  // The Android hardware back button. A real external subscription, which is
+  // what an effect is for - and it reads the live phase off the store rather
+  // than closing over it, so the handler never needs re-attaching.
+  useEffect(
+    () =>
+      onBackButton(() => {
+        const current = useGameStore.getState().phase;
+        switch (backTarget(current, screen)) {
+          case 'pause-run':
+            pauseRun();
+            break;
+          case 'resume-menu':
+            returnToMenu();
+            setScreen('home');
+            break;
+          case 'close-screen':
+            setScreen('home');
+            break;
+          case 'exit-app':
+            void exitApp();
+            break;
+        }
+      }),
+    [screen],
+  );
 
   const goHome = useCallback(() => setScreen('home'), []);
   const navigate = useCallback((next: Screen) => setScreen(next), []);

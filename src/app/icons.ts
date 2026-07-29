@@ -17,13 +17,14 @@ import {
   ChevronsUp,
   Home,
   Magnet,
-  MountainSnow,
   Pause,
   RotateCcw,
   Settings,
+  Store,
   Sparkles,
   Target,
   Trophy,
+  X,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -51,11 +52,13 @@ export function powerUpIcon(id: PowerUpId): LucideIcon {
 export const NavIcons = {
   home: Home,
   scores: Trophy,
-  // Not the chairlift, which the power-up already owns - two buttons sharing a
-  // glyph is worse than neither being literal.
-  boards: MountainSnow,
+  // The shop sells boards, riders and upgrades, so it is named for the place
+  // rather than for one of the three things in it - which is what "Boards" was,
+  // and why nobody found the riders.
+  shop: Store,
   daily: Target,
   settings: Settings,
   restart: RotateCcw,
   pause: Pause,
+  close: X,
 } as const;

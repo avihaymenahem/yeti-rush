@@ -1,21 +1,74 @@
 /**
- * Skins and power-up upgrades.
+ * Boards, riders and power-up upgrades.
  *
  * Reads and writes only through the meta store, so every purchase rule -
  * affordability, ownership, level caps - lives in one tested place rather than
  * being re-implemented in the button handlers.
+ *
+ * Everything on sale is shown *as it will look*. A board is previewed with the
+ * rider currently equipped, and a rider with the board currently equipped, so
+ * the shop answers the question actually being asked - what the combination
+ * looks like - rather than describing one half of it. Power-ups use the same
+ * icons the HUD uses mid-run, for the same reason: a coloured square here and a
+ * magnet there is two things to learn instead of one.
+ *
+ * Three tabs rather than one long page. Fourteen cards stacked was a page you
+ * had to remember your way down, and on a phone the power-ups sat four screens
+ * below the fold. The cost of tabs is that two thirds of the shop is now
+ * hidden, so each tab carries a dot when it holds something unowned and
+ * affordable - see `hasAffordable`. That is the discovery the scroll used to
+ * give away for free, and it has to be paid back deliberately.
  */
 
-import { BoardPreview } from '@/app/BoardPreview';
+import { useRef, useState } from 'react';
 import { BoardStatList } from '@/app/BoardStatList';
+import { Icon } from '@/app/Icon';
+import { NavIcons, powerUpIcon } from '@/app/icons';
+import { RiderPreview } from '@/app/RiderPreview';
 import { TapButton } from '@/app/TapButton';
-import { POWER_UP_IDS, powerUpDef, UPGRADE_MAX_LEVEL, upgradePrice } from '@/game/content/powerUps';
 import { CHARACTER_IDS, characterDef } from '@/game/content/characters';
-import { skinsForSale } from '@/game/content/skins';
+import { POWER_UP_IDS, powerUpDef, UPGRADE_MAX_LEVEL, upgradePrice } from '@/game/content/powerUps';
+import { hasAffordable, SHOP_TABS, type ShopTab } from '@/game/content/shopTabs';
+import { skinDef, skinsForSale } from '@/game/content/skins';
 import { useMetaStore } from '@/game/state/metaStore';
 
 export interface ShopProps {
   onClose: () => void;
+}
+
+interface BuyButtonProps {
+  owned: boolean;
+  equipped: boolean;
+  price: number;
+  coins: number;
+  onBuy: () => void;
+  onEquip: () => void;
+}
+
+/**
+ * The buy / equip / equipped control.
+ *
+ * One component, because the three states are one decision. Each list building
+ * its own is how the boards ended up with a differently sized button from
+ * everything else on the page.
+ */
+function BuyButton({ owned, equipped, price, coins, onBuy, onEquip }: BuyButtonProps) {
+  if (equipped) return <span className="shop-tag shop-tag-on">Equipped</span>;
+
+  if (owned) {
+    return (
+      <TapButton className="shop-button" onTap={onEquip}>
+        Equip
+      </TapButton>
+    );
+  }
+
+  return (
+    <TapButton className="shop-button shop-button-buy" disabled={coins < price} onTap={onBuy}>
+      <span className="shop-coin" aria-hidden="true" />
+      {price.toLocaleString()}
+    </TapButton>
+  );
 }
 
 export function Shop({ onClose }: ShopProps) {
@@ -26,133 +79,182 @@ export function Shop({ onClose }: ShopProps) {
   const buyCharacter = useMetaStore((state) => state.buyCharacter);
   const equipCharacter = useMetaStore((state) => state.equipCharacter);
 
+  const [tab, setTab] = useState<ShopTab>('boards');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const wearing = characterDef(save.equippedCharacter);
+  const riding = skinDef(save.equippedSkin);
+
+  // Switching tabs scrolls back to the top. Landing halfway down a shorter list
+  // because the last one was longer reads as the page having jumped.
+  const openTab = (next: ShopTab) => {
+    setTab(next);
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
+
   return (
-    <div className="layer layer-safe panel panel-scroll">
+    <div ref={scrollRef} className="layer layer-safe panel panel-scroll">
       <div className="panel-card panel-card-wide">
-        <header className="panel-header">
-          <h2 className="panel-title">Shop</h2>
-          <span className="panel-wallet">{save.coins.toLocaleString()} coins</span>
+        <header className="shop-header">
+          <div>
+            <h2 className="panel-title">Shop</h2>
+            <p className="shop-wearing">
+              {wearing.name} on the {riding.name}
+            </p>
+          </div>
+          <div className="shop-header-right">
+            <span className="shop-wallet">
+              <span className="shop-coin" aria-hidden="true" />
+              {save.coins.toLocaleString()}
+            </span>
+            {/* A way out from the top as well as the bottom. The boards tab is
+                still a thousand pixels tall, and scrolling to the end of a list
+                to leave it is the wrong way round - you leave from where you
+                gave up, which is wherever you are. */}
+            <TapButton className="panel-close" aria-label="Close the shop" onTap={onClose}>
+              <Icon icon={NavIcons.close} size={18} />
+            </TapButton>
+          </div>
         </header>
 
-        <h3 className="panel-section">Boards</h3>
-        <p className="panel-note">
-          Every board handles differently. None is strictly best - pick the trade you want.
-        </p>
-        <ul className="shop-list">
-          {skinsForSale().map((skin) => {
-            const owned = save.ownedSkins.includes(skin.id);
-            const equipped = save.equippedSkin === skin.id;
-            const affordable = save.coins >= skin.price;
+        <div className="shop-tabs" role="tablist" aria-label="Shop sections">
+          {SHOP_TABS.map((entry) => (
+            <TapButton
+              key={entry.id}
+              className={`shop-tab${tab === entry.id ? ' shop-tab-on' : ''}`}
+              role="tab"
+              aria-selected={tab === entry.id}
+              onTap={() => openTab(entry.id)}
+            >
+              {entry.label}
+              {hasAffordable(entry.id, save) && <span className="shop-dot" aria-label="affordable" />}
+            </TapButton>
+          ))}
+        </div>
 
-            return (
-              <li key={skin.id} className="shop-row shop-row-board">
-                <BoardPreview skin={skin} />
-                <span className="shop-name">
-                  {skin.name}
-                  <span className="shop-tagline">{skin.tagline}</span>
-                </span>
+        {tab === 'boards' && (
+          <div role="tabpanel">
+            <p className="panel-note">
+              Every board handles differently. None is strictly best - pick the trade you want.
+            </p>
+            <ul className="shop-grid">
+              {skinsForSale().map((skin) => {
+                const equipped = save.equippedSkin === skin.id;
 
-                {equipped ? (
-                  <span className="shop-tag">Equipped</span>
-                ) : owned ? (
-                  <TapButton className="shop-button" onTap={() => equipSkin(skin.id)}>
-                    Equip
-                  </TapButton>
-                ) : (
-                  <TapButton
-                    className="shop-button"
-                    disabled={!affordable}
-                    onTap={() => buySkin(skin.id)}
-                  >
-                    {skin.price.toLocaleString()}
-                  </TapButton>
-                )}
+                return (
+                  <li key={skin.id} className={`shop-card${equipped ? ' shop-card-on' : ''}`}>
+                    {/* This board, under the rider they have already chosen. */}
+                    <RiderPreview character={wearing} skin={skin} size={66} />
+                    <span className="shop-card-name">{skin.name}</span>
+                    <BuyButton
+                      owned={save.ownedSkins.includes(skin.id)}
+                      equipped={equipped}
+                      price={skin.price}
+                      coins={save.coins}
+                      onBuy={() => buySkin(skin.id)}
+                      onEquip={() => equipSkin(skin.id)}
+                    />
+                    <span className="shop-tagline">{skin.tagline}</span>
+                    {/* Its own row across the whole card. Squeezed into the middle
+                        column it collided with the price, which is the one thing on
+                        a shop card that must never be ambiguous. */}
+                    <div className="shop-card-stats">
+                      <BoardStatList stats={skin.stats} compact />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
-                <BoardStatList stats={skin.stats} compact />
-              </li>
-            );
-          })}
-        </ul>
+        {tab === 'riders' && (
+          <div role="tabpanel">
+            <p className="panel-note">
+              Looks only. Who you ride as never changes how the board handles - that is what the
+              boards are for.
+            </p>
+            <ul className="shop-grid">
+              {CHARACTER_IDS.map((id) => {
+                const character = characterDef(id);
+                const equipped = save.equippedCharacter === id;
 
-        <h3 className="panel-section">Riders</h3>
-        <p className="panel-note">
-          Looks only. Who you ride as never changes how the board handles - that is
-          what the boards above are for.
-        </p>
-        <ul className="shop-list">
-          {CHARACTER_IDS.map((id) => {
-            const character = characterDef(id);
-            const owned = save.ownedCharacters.includes(id);
-            const equipped = save.equippedCharacter === id;
+                return (
+                  <li key={id} className={`shop-card${equipped ? ' shop-card-on' : ''}`}>
+                    {/* This rider, on the board they have already chosen. */}
+                    <RiderPreview character={character} skin={riding} size={66} />
+                    <span className="shop-card-name">{character.name}</span>
+                    <BuyButton
+                      owned={save.ownedCharacters.includes(id)}
+                      equipped={equipped}
+                      price={character.price}
+                      coins={save.coins}
+                      onBuy={() => buyCharacter(id)}
+                      onEquip={() => equipCharacter(id)}
+                    />
+                    <span className="shop-tagline">{character.tagline}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
-            return (
-              <li key={id} className="shop-row">
-                {/* Three of the character's four colours, which is enough to
-                    tell them apart in a list without rendering a second yeti. */}
-                <span className="shop-rider" aria-hidden="true">
-                  <span style={{ background: character.fur }} />
-                  <span style={{ background: character.furShade }} />
-                  <span style={{ background: character.accent }} />
-                </span>
-                <span className="shop-name">
-                  {character.name}
-                  <span className="shop-tagline">{character.tagline}</span>
-                </span>
+        {tab === 'powerUps' && (
+          <div role="tabpanel">
+            <p className="panel-note">Every level makes a pickup last thirty per cent longer.</p>
+            <ul className="shop-grid">
+              {POWER_UP_IDS.map((id) => {
+                const def = powerUpDef(id);
+                const level = save.upgrades[id] ?? 0;
+                const maxed = level >= UPGRADE_MAX_LEVEL;
+                const price = upgradePrice(level);
 
-                {equipped ? (
-                  <span className="shop-tag">Equipped</span>
-                ) : owned ? (
-                  <TapButton className="shop-button" onTap={() => equipCharacter(id)}>
-                    Equip
-                  </TapButton>
-                ) : (
-                  <TapButton
-                    className="shop-button"
-                    disabled={save.coins < character.price}
-                    onTap={() => buyCharacter(id)}
-                  >
-                    {character.price.toLocaleString()}
-                  </TapButton>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                return (
+                  <li key={id} className="shop-card">
+                    {/* The icon the HUD uses mid-run, in the power-up's own colour. */}
+                    <span
+                      className="shop-icon"
+                      style={{ color: def.color, borderColor: def.color }}
+                    >
+                      <Icon icon={powerUpIcon(id)} size={26} />
+                    </span>
+                    <div className="shop-card-body">
+                      <span className="shop-card-name">{def.label}</span>
+                      {/* Pips rather than "Lv 2/3". How much is left is read
+                          without counting, which is all this has to say. */}
+                      <span
+                        className="shop-pips"
+                        aria-label={`Level ${level} of ${UPGRADE_MAX_LEVEL}`}
+                      >
+                        {Array.from({ length: UPGRADE_MAX_LEVEL }, (_, i) => (
+                          <span
+                            key={i}
+                            className="shop-pip"
+                            style={i < level ? { background: def.color } : undefined}
+                          />
+                        ))}
+                      </span>
+                    </div>
 
-        <h3 className="panel-section">Power-up upgrades</h3>
-        <ul className="shop-list">
-          {POWER_UP_IDS.map((id) => {
-            const def = powerUpDef(id);
-            const level = save.upgrades[id] ?? 0;
-            const maxed = level >= UPGRADE_MAX_LEVEL;
-            const price = upgradePrice(level);
-
-            return (
-              <li key={id} className="shop-row">
-                <span className="shop-swatch" style={{ background: def.color, borderColor: def.color }} />
-                <span className="shop-name">
-                  {def.label}
-                  <span className="shop-level">
-                    {' '}
-                    Lv {level}/{UPGRADE_MAX_LEVEL}
-                  </span>
-                </span>
-
-                {maxed ? (
-                  <span className="shop-tag">Max</span>
-                ) : (
-                  <TapButton
-                    className="shop-button"
-                    disabled={save.coins < price}
-                    onTap={() => buyUpgrade(id)}
-                  >
-                    {price.toLocaleString()}
-                  </TapButton>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    {maxed ? (
+                      <span className="shop-tag shop-tag-on">Max</span>
+                    ) : (
+                      <TapButton
+                        className="shop-button shop-button-buy"
+                        disabled={save.coins < price}
+                        onTap={() => buyUpgrade(id)}
+                      >
+                        <span className="shop-coin" aria-hidden="true" />
+                        {price.toLocaleString()}
+                      </TapButton>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <TapButton className="panel-button" onTap={onClose}>
           Back

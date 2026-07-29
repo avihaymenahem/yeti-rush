@@ -243,6 +243,54 @@ everyone was already riding — nothing granted, nothing taken away.
 
 ---
 
+## Phase 7 — The shop, and the back button
+
+**Done.** "Boards" was the wrong name on the wrong button: the page sells
+boards, riders and upgrades, and naming it after one of the three is why nobody
+found the other two. It is "Shop" now, with a `Store` glyph rather than a
+mountain.
+
+Everything on sale is shown **as it will look**. A board is previewed with the
+rider currently equipped and a rider with the board currently equipped, so the
+page answers what the *combination* looks like rather than describing half of
+it. `BoardPreview` became `RiderPreview` and takes both — it had been reading
+fur off the board, which is exactly the confusion the two were split to end.
+Power-ups use the icons the HUD already uses mid-run, instead of a coloured
+square; a square here and a magnet there is two things to learn instead of one.
+
+Cards replaced three bespoke row layouts, which is how the page had ended up
+with three button sizes and two ideas of where the price goes. Stats and
+taglines get full-width rows: squeezed into the middle column the stat values
+ran under the price, and a shop card with an ambiguous price is the one kind
+that must not ship.
+
+And then **tabs**, because fourteen cards stacked is a page you have to
+remember your way down - on a phone the power-ups sat four screens below the
+fold. Tabs are not free, though: they trade a long page for a page whose
+contents are *hidden*, and hiding two thirds of a shop is how a player never
+learns the riders exist. Each tab therefore carries a dot when it holds
+something unowned *and* affordable - `hasAffordable` in `content/shopTabs.ts`,
+kept out of the component so the rule is testable. Both halves of that condition
+are load-bearing and `tests/shopTabs.test.ts` pins each: a dot on something out
+of reach is a nag, a dot on a section already cleared is a lie, and either one
+teaches the player to ignore every dot including the useful one.
+
+### On TanStack Router
+
+Considered and **not** added. These screens are modal layers over one persistent
+canvas — the whole architecture turns on that Canvas mounting exactly once — so
+there is nothing to address, nothing to deep-link to, and a history stack would
+be a second copy of `screen` to keep in step with the first.
+
+But the *reason* to want routing here was real and is now fixed: the Android
+hardware back button closed the app from anywhere, including mid-run. It is a
+`@capacitor/app` listener over `backTarget()`, a pure function of phase and
+screen — pause mid-run, decline a revive, close an open screen, and exit only
+from an idle home. That is the part a router would have given us, and it is
+sixty lines and a test file rather than a dependency.
+
+---
+
 ## Later, deliberately
 
 - **Something to open.** A crate or a spin — now the biggest remaining gap. The

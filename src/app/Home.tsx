@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react';
-import { BoardPreview } from '@/app/BoardPreview';
+import { RiderPreview } from '@/app/RiderPreview';
 import { Icon } from '@/app/Icon';
 import { NavIcons } from '@/app/icons';
 import type { Screen } from '@/app/screens';
@@ -20,6 +20,7 @@ import {
   gameModeDef,
   type GameModeId,
 } from '@/game/content/modes';
+import { characterDef } from '@/game/content/characters';
 import { skinDef } from '@/game/content/skins';
 import { useMetaStore } from '@/game/state/metaStore';
 import { startRun } from '@/game/state/runController';
@@ -32,6 +33,7 @@ export interface HomeProps {
 export function Home({ onNavigate }: HomeProps) {
   const save = useMetaStore((state) => state.save);
   const board = skinDef(save.equippedSkin);
+  const rider = characterDef(save.equippedCharacter);
   const dailyAvailable = canClaimDaily(save.lastDailyClaim, localDateKey(new Date()));
 
   // The chosen mode lives here rather than in a store: it is a menu choice, and
@@ -104,8 +106,8 @@ export function Home({ onNavigate }: HomeProps) {
 
         <nav className="home-nav">
           <TapButton className="nav-button" onTap={() => onNavigate('shop')}>
-            <Icon icon={NavIcons.boards} size={21} />
-            Boards
+            <Icon icon={NavIcons.shop} size={21} />
+            Shop
           </TapButton>
           <TapButton className="nav-button" onTap={() => onNavigate('missions')}>
             <Icon icon={NavIcons.daily} size={21} />
@@ -122,11 +124,15 @@ export function Home({ onNavigate }: HomeProps) {
       <TapButton
         className="home-board"
         onTap={() => onNavigate('shop')}
-        aria-label={`Equipped board: ${board.name}. Open boards.`}
+        aria-label={`${rider.name} on the ${board.name}. Open the shop.`}
       >
-        <BoardPreview skin={board} size={44} />
+        {/* Both halves of the outfit, since both are now chosen separately and
+            this button is the only place the pairing is seen outside a run. */}
+        <RiderPreview character={rider} skin={board} size={44} />
         <span className="home-board-text">
-          <span className="home-board-name">{board.name}</span>
+          <span className="home-board-name">
+            {rider.name} · {board.name}
+          </span>
           <span className="home-board-tagline">{board.tagline}</span>
         </span>
       </TapButton>

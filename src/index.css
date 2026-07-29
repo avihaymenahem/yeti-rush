@@ -1423,33 +1423,259 @@ canvas {
   opacity: 0.75;
 }
 
-.shop-row-board {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas:
-    'swatch name action'
-    'stats  stats stats';
-  gap: 0.5rem 0.7rem;
-}
-
-.shop-row-board .board-preview {
-  grid-area: swatch;
-  align-self: start;
-}
-
-.shop-row-board .shop-name {
-  grid-area: name;
+/*
+ * Shop cards.
+ *
+ * One shape for boards, riders and upgrades, because they are all the same
+ * decision - look at a thing, see what it costs, take it or leave it. Three
+ * bespoke row layouts is how the page ended up with three different button
+ * sizes and two ideas of where the price goes.
+ *
+ * A grid rather than a flex row so the preview can be tall without dragging the
+ * name and the price out of line with the cards above and below it.
+ */
+.shop-grid {
+  list-style: none;
   display: flex;
   flex-direction: column;
+  gap: 0.55rem;
 }
 
-.shop-row-board .shop-button,
-.shop-row-board .shop-tag {
-  grid-area: action;
+.shop-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 0.9rem;
+  background: rgba(20, 45, 62, 0.05);
 }
 
-.shop-row-board .stat-list {
-  grid-area: stats;
+/*
+ * Stats get their own row across the whole card.
+ *
+ * In the middle column they were a four-row table in about a hundred pixels,
+ * with the values running under the price - and a shop card where the price is
+ * ambiguous is the one kind that must not ship.
+ */
+.shop-card-stats {
+  grid-column: 1 / -1;
+  padding-top: 0.15rem;
+  border-top: 1px solid rgba(22, 40, 58, 0.09);
+}
+
+/* Full width, under the name and price rather than beside them. */
+.shop-card > .shop-tagline {
+  grid-column: 1 / -1;
+  margin-top: -0.2rem;
+}
+
+/* What is equipped is stated by the card, not only by its button - the button
+   is at the far end of a wide row and the eye starts at the picture. */
+.shop-card-on {
+  border-color: rgba(47, 168, 224, 0.5);
+  background: rgba(47, 168, 224, 0.1);
+}
+
+/*
+ * Only the upgrade rows still have a middle stack; boards and riders put their
+ * tagline on its own row instead. Three lines of wrapped text in a hundred-pixel
+ * column reads as a broken layout, and the width was there for the taking.
+ */
+.shop-card-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.shop-card-name {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* Sits on the card's own tint so the rider reads as a figure rather than a
+   sticker, and gives the SVG a floor to cast its shadow onto. */
+.rider-preview {
+  flex: none;
+  border-radius: 0.7rem;
+  background: linear-gradient(180deg, rgba(94, 163, 212, 0.22), rgba(253, 243, 228, 0.5));
+}
+
+.shop-icon {
+  display: grid;
+  width: 3.1rem;
+  height: 3.1rem;
+  flex: none;
+  place-items: center;
+  border: 2px solid;
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* Upgrade level as pips. Read without counting, which is all it has to do. */
+.shop-pips {
+  display: flex;
+  gap: 0.22rem;
+  margin-top: 0.1rem;
+}
+
+.shop-pip {
+  width: 1.5rem;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: rgba(22, 40, 58, 0.16);
+}
+
+/*
+ * Section tabs.
+ *
+ * A segmented control rather than a row of links: the three sections are one
+ * choice with one answer, and the shape says so before the labels are read.
+ * Sticky, so switching section does not mean scrolling back up past a list to
+ * find the control that got you there.
+ */
+.shop-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.9rem 0 0.2rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.08);
+  /* The card behind is translucent; without this the list scrolls through. */
+  backdrop-filter: blur(8px);
+}
+
+.shop-tab {
+  position: relative;
+  flex: 1;
+  padding: 0.45rem 0.4rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  opacity: 0.55;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.shop-tab-on {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(12, 34, 58, 0.16);
+  opacity: 1;
+}
+
+/*
+ * Something in there is unowned and affordable.
+ *
+ * The whole reason tabs are affordable at all: hiding two thirds of the shop
+ * takes away the discovery that scrolling past a section used to give for free,
+ * and this is what pays it back. Never shown for something out of reach - a dot
+ * that means "look, but you cannot have it" gets ignored, and then so does
+ * every other dot.
+ */
+.shop-dot {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.55rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: #f0b429;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.shop-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* What the player is currently wearing, under the title - so the previews below
+   have something to be compared against. */
+.shop-wearing {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+/* Wallet and close, in that order: the money is what the eye wants and the exit
+   is where the thumb expects it, at the very corner. */
+.shop-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * The close control.
+ *
+ * A circle rather than a labelled button, and at the corner, because that is
+ * where every other app on the phone puts it - a shop is not the place to teach
+ * someone a new way to leave a page.
+ */
+.panel-close {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.09);
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.panel-close:active {
+  background: rgba(20, 45, 62, 0.18);
+}
+
+.shop-wallet {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(240, 180, 41, 0.16);
+  color: #a8690f;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The coin, so a number with a price attached never reads as a plain number. */
+.shop-coin {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  border: 2px solid #c98a1f;
+  border-radius: 999px;
+  background: #f0b429;
+}
+
+.shop-button-buy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.shop-tag-on {
+  color: #1c7fb5;
 }
 
 .shop-tagline {

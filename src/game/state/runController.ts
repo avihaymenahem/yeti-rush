@@ -36,6 +36,17 @@ export function startRun(modeId: GameModeId = DEFAULT_MODE, seed?: number): void
   // this moment, so buying an upgrade or switching boards mid-session cannot
   // alter a run already in progress.
   resetRuntime(runSeed, save.upgrades, skinDef(save.equippedSkin).stats, mode);
+
+  // Only in Endless. Blizzard opens at top speed and Time Attack is on a clock;
+  // neither is a place to be reading your first instruction.
+  runtime.coaching = !save.coached && mode.id === DEFAULT_MODE;
+  if (runtime.coaching) {
+    // A quiet opening to look around in, through the same mechanism that keeps
+    // a ramp landing clear. Nothing bespoke, and nothing the generator has to
+    // know is happening.
+    runtime.track.clearUntil = Math.max(runtime.track.clearUntil, TUNING.coach.openingClearance);
+  }
+
   runtime.running = true;
 
   const store = useGameStore.getState();
@@ -175,6 +186,9 @@ export function endRun(): void {
     timeRemaining: runtime.timeRemaining,
     // The run is over; nothing is still ticking down.
     avalanche: 0,
+    trickPending: 0,
+    trickChain: 0,
+    coach: null,
     powerUps: [],
   });
   store.setDeathCause(runtime.deathCause);
@@ -183,6 +197,14 @@ export function endRun(): void {
   // Banks coins, records and mission progress. Runs after the HUD update so a
   // slow storage write can never delay the game-over screen appearing.
   useMetaStore.getState().commitRun(runStats());
+
+  // One coached run, whether or not every input was tried. A player who died in
+  // the first chunk has still seen the prompts, and a second run that opened
+  // with them again would read as the game not having noticed.
+  if (runtime.coaching) {
+    runtime.coaching = false;
+    useMetaStore.getState().markCoached();
+  }
 }
 
 /**

@@ -58,6 +58,54 @@ function AvalancheBanner() {
   );
 }
 
+/**
+ * What the flight is worth, while it is still in the air.
+ *
+ * Centred and large, because it is read in peripheral vision - the player is
+ * looking at where they are going to land, not at the corner of the screen, and
+ * the whole decision it supports ("one more?") happens in under a second.
+ */
+function TrickTally() {
+  const pending = useGameStore((state) => state.trickPending);
+  const chain = useGameStore((state) => state.trickChain);
+  if (pending <= 0) return null;
+
+  return (
+    <div className="hud-tricks" role="status">
+      <span className="hud-tricks-score">+{pending.toLocaleString()}</span>
+      <span className="hud-tricks-chain">{chain}x</span>
+    </div>
+  );
+}
+
+/** What each prompt says. Short enough to read at thirty metres a second. */
+const COACH_COPY = {
+  move: { title: 'Swipe left or right', detail: 'Change lanes' },
+  jump: { title: 'Swipe up', detail: 'Jump it' },
+  slide: { title: 'Swipe down', detail: 'Slide under' },
+} as const;
+
+/**
+ * The opening coach.
+ *
+ * Sits low, under the lane the player is reading, so it never covers the thing
+ * it is telling them to deal with. It disappears the moment the input is used
+ * rather than after a timer - the fastest possible acknowledgement that they
+ * got it, and the reason it never has to be dismissed.
+ */
+function Coach() {
+  const hint = useGameStore((state) => state.coach);
+  if (!hint) return null;
+
+  const copy = COACH_COPY[hint];
+  return (
+    <div className="hud-coach" role="status">
+      <span className="hud-coach-title">{copy.title}</span>
+      <span className="hud-coach-detail">{copy.detail}</span>
+    </div>
+  );
+}
+
 export function Hud() {
   const score = useGameStore((state) => state.score);
   const coins = useGameStore((state) => state.coins);
@@ -86,6 +134,8 @@ export function Hud() {
       </div>
       <div className="hud-distance">{Math.floor(distance)} m</div>
       <AvalancheBanner />
+      <TrickTally />
+      <Coach />
 
       {timeRemaining !== null && (
         // Turns urgent inside the last ten seconds, which is the only moment

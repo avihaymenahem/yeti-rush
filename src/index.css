@@ -158,6 +158,111 @@ canvas {
   }
 }
 
+/* A character's palette as three bands - enough to tell riders apart in a list
+   without paying for a second yeti on screen. */
+.shop-rider {
+  display: flex;
+  overflow: hidden;
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: 0 0 auto;
+  border: 1px solid rgba(22, 40, 58, 0.16);
+  border-radius: 0.7rem;
+}
+
+.shop-rider > span {
+  flex: 1;
+}
+
+/* --- Opening coach ----------------------------------------------------- */
+
+@keyframes coach-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hud-coach {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Low, under the lane being read. A prompt over the track covers the very
+     obstacle it is telling the player about. */
+  bottom: calc(var(--safe-bottom) + 14%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  color: #fff;
+  text-align: center;
+  text-shadow:
+    0 2px 0 rgba(12, 34, 58, 0.5),
+    0 0 12px rgba(12, 34, 58, 0.65);
+  animation: coach-in 220ms ease-out;
+}
+
+.hud-coach-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.hud-coach-detail {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #ffd35c;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-coach {
+    animation: none;
+  }
+}
+
+/* --- Tricks ------------------------------------------------------------ */
+
+.hud-tricks {
+  position: absolute;
+  /* High enough to sit in the sky above the rider rather than across them. The
+     camera only partly follows a ramp arc, so at the top of a flight the yeti
+     is around the middle of the frame and anything at a third down lands on
+     their back - which is the one thing the player is watching. */
+  top: 17%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  color: #fff;
+  /* Heavy outline rather than a panel: this lands over snow, sky and mountains
+     depending on where the arc has got to, and none of those are a background
+     a translucent card reads against. */
+  text-shadow:
+    0 2px 0 rgba(12, 34, 58, 0.55),
+    0 0 14px rgba(12, 34, 58, 0.7);
+}
+
+.hud-tricks-score {
+  font-size: 2.6rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.hud-tricks-chain {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #ffd35c;
+  letter-spacing: 0.08em;
+}
+
 /* --- Avalanche --------------------------------------------------------- */
 
 /*

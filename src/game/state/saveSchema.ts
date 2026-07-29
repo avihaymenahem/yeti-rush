@@ -6,6 +6,7 @@
  * hand-edited save has to degrade to defaults rather than brick the app.
  */
 
+import { DEFAULT_CHARACTER } from '@/game/content/characters';
 import { DEFAULT_MODE } from '@/game/content/modes';
 
 export const SAVE_VERSION = 1;
@@ -41,6 +42,9 @@ export interface SaveData {
   leaderboard: ScoreEntry[];
   ownedSkins: string[];
   equippedSkin: string;
+  /** Characters unlocked. The default is always present; load enforces it. */
+  ownedCharacters: string[];
+  equippedCharacter: string;
   /** Power-up upgrade levels, keyed by power-up id. */
   upgrades: Record<string, number>;
   /** Active daily missions, keyed by mission id, value is progress so far. */
@@ -53,6 +57,15 @@ export interface SaveData {
   lastDailyClaim: string | null;
   /** Consecutive days claimed, for escalating daily rewards. */
   dailyStreak: number;
+  /**
+   * Whether the opening coach has run.
+   *
+   * A boolean rather than a count: it teaches three inputs once, and a player
+   * who has seen it does not need it again. Defaults false for an existing
+   * save too, so anyone already playing gets it once and never again - which is
+   * cheaper than a migration that has to guess whether they already know how.
+   */
+  coached: boolean;
   settings: {
     /**
      * Volumes as 0-100 slider positions, not booleans.
@@ -80,12 +93,15 @@ export function createDefaultSave(): SaveData {
     leaderboard: [],
     ownedSkins: [DEFAULT_SKIN],
     equippedSkin: DEFAULT_SKIN,
+    ownedCharacters: [DEFAULT_CHARACTER],
+    equippedCharacter: DEFAULT_CHARACTER,
     upgrades: {},
     missions: {},
     missionsClaimed: [],
     missionsRolledOn: null,
     lastDailyClaim: null,
     dailyStreak: 0,
+    coached: false,
     settings: {
       musicVolume: 100,
       sfxVolume: 100,
@@ -231,6 +247,13 @@ export function migrate(raw: unknown): SaveData {
 
   const equippedSkin = str(raw['equippedSkin'], DEFAULT_SKIN);
 
+  // The same two rules again for characters. An older save has neither field,
+  // so both fall back to the default - which is what every existing player was
+  // riding as anyway, since the rider had no identity of its own before this.
+  const ownedCharacters = stringArray(raw['ownedCharacters'], defaults.ownedCharacters);
+  if (!ownedCharacters.includes(DEFAULT_CHARACTER)) ownedCharacters.unshift(DEFAULT_CHARACTER);
+  const equippedCharacter = str(raw['equippedCharacter'], DEFAULT_CHARACTER);
+
   return {
     version: SAVE_VERSION,
     coins: counter(raw['coins'], defaults.coins),
@@ -241,6 +264,10 @@ export function migrate(raw: unknown): SaveData {
     ownedSkins,
     // Never equip something the player does not own.
     equippedSkin: ownedSkins.includes(equippedSkin) ? equippedSkin : DEFAULT_SKIN,
+    ownedCharacters,
+    equippedCharacter: ownedCharacters.includes(equippedCharacter)
+      ? equippedCharacter
+      : DEFAULT_CHARACTER,
     upgrades: numberRecord(raw['upgrades']),
     missions: numberRecord(raw['missions']),
     // Empty is a valid state here, unlike ownedSkins, so no fallback list.
@@ -250,6 +277,7 @@ export function migrate(raw: unknown): SaveData {
     missionsRolledOn: nullableDate(raw['missionsRolledOn']),
     lastDailyClaim: nullableDate(raw['lastDailyClaim']),
     dailyStreak: counter(raw['dailyStreak'], defaults.dailyStreak),
+    coached: raw['coached'] === true,
     settings: {
       musicVolume: volume(
         settings['musicVolume'],

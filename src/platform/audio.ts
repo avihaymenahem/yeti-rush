@@ -295,6 +295,30 @@ export function sfxNearMiss(): void {
   noise(0.16, 0.09, 3200, 700);
 }
 
+/**
+ * A rotation starting, rising in pitch with the chain.
+ *
+ * The pitch *is* the readout. Mid-flight there is nowhere on screen a player
+ * looking at the landing can also read a number, so how deep into the chain
+ * they are has to be audible or it is not knowable at all.
+ */
+export function sfxTrick(chain = 0): void {
+  const step = Math.min(chain, 5);
+  tone({ type: 'triangle', from: 440 * Math.pow(2, step / 12), to: 880, duration: 0.16, gain: 0.11 });
+  noise(0.18, 0.07, 1800, 700);
+}
+
+/** Landing a chain cleanly. Warm and resolved, unlike the trick blips. */
+export function sfxTrickLanded(): void {
+  tone({ type: 'sine', from: 660, duration: 0.1, gain: 0.13 });
+  tone({ type: 'sine', from: 990, duration: 0.18, gain: 0.11, delay: 0.08 });
+}
+
+/** Blowing one. A dull thud where the chime should have been. */
+export function sfxTrickFumbled(): void {
+  noise(0.2, 0.16, 260, 90);
+}
+
 /** Board meeting snow. Short, dull and low - weight rather than event. */
 export function sfxLand(): void {
   noise(0.18, 0.13, 420, 150);

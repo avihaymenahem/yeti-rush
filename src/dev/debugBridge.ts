@@ -17,7 +17,7 @@ import { endRun, returnToMenu, startRun } from '@/game/state/runController';
 import { runtime } from '@/game/state/runtime';
 import { obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import { laneToX, requestLaneChange } from '@/game/systems/lanes';
-import { requestJump, requestSlide } from '@/game/systems/player';
+import { requestSlide, tap } from '@/game/systems/player';
 import { worldZOf } from '@/game/systems/spawner';
 
 interface NearbyEntity {
@@ -79,7 +79,9 @@ export function installDebugBridge(): void {
     startRun,
     endRun,
     returnToMenu,
-    jump: () => void requestJump(runtime.player),
+    // Goes through the same resolver the gesture handler uses, so a scripted
+    // tap does exactly what a thumb does - tricks included.
+    jump: () => void tap(runtime.player),
     slide: () => void requestSlide(runtime.player),
     left: () => void requestLaneChange(runtime.lane, -1),
     right: () => void requestLaneChange(runtime.lane, 1),

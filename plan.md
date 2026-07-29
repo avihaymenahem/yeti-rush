@@ -162,14 +162,94 @@ change nothing the generator uses to decide layout.
 
 ---
 
+---
+
+## Phase 4 — Tricks off a ramp
+
+**Done.** The gap this closes is one only visible from inside the codebase: a
+ramp launch is twenty-two metres of committed flight in which the player can
+only steer, so the most dramatic second in a run was one they spent as a
+passenger. Alto's and Ski Safari make exactly that window their expressive core.
+
+A tap mid-flight spins. Each completed rotation pays more than the last, and
+landing while one is still turning forfeits **the whole flight's** chain — so
+the decision is always "one more?" and the cost of greed is everything already
+earned, never the run itself. The arc, the landing and the cleared track after
+it are untouched, which is what let this ship without the generator having to
+learn anything: `tests/tricks.test.ts` asserts a tricking flight and a plain one
+follow bit-identical trajectories.
+
+Restricted to ramp flights on purpose. A tap in ordinary airtime already buffers
+the next jump so it fires on touchdown, and that is worth more than tricks would
+be there. A ramp flight is the one span where a tap did nothing at all.
+
+Two things fell out of building it. `tap()` in `systems/player.ts` is now the
+single place that decides what a tap means, because the trick priority initially
+lived only in the gesture handler — which quietly left the dev bridge unable to
+reproduce what a thumb does, the one job it has. And the trick timer snaps to
+zero rather than clamping: fifteen subtractions of 1/60 from 0.25 leave a
+positive residue around 1e-17, which would have reported a trick as unfinished
+on the exact frame the player landed it.
+
+---
+
+## Phase 5 — The opening coach
+
+**Done.** The game shipped for months teaching none of its three inputs: a new
+player was dropped onto a generated slope and had to discover that a downward
+swipe existed at all.
+
+Reactive, not scripted, and that is the whole design. Nothing lays a tutorial
+lane — the prompt to jump appears when something jumpable is genuinely on its
+way, in the player's own lane, so the input is taught at the moment it is needed
+on the real slope rather than in a sandbox they then have to leave. It also
+means the coach cannot break a single thing the generator guarantees, because it
+does not touch it. The one thing it asks of the track is a quiet opening, and
+that goes through `clearUntil`, which has existed for ramp landings all along.
+
+Each prompt retires the instant the input is used, inferred from the player's
+own state rather than plumbed through from the gesture handler — so a swipe, an
+arrow key and a scripted tap all count identically, and an input the game
+rejected does not count as learnt. A ramp launch deliberately does not count as
+a jump: the ramp threw them, they pressed nothing.
+
+Most of `tests/coach.test.ts` is about restraint rather than about prompting. A
+coach that speaks constantly is worse than none, and one that prompts for
+something two lanes across teaches the wrong lesson about when jumping is the
+answer.
+
+---
+
+## Phase 6 — Riders
+
+**Done.** Characters as a second, deliberately *cosmetic* axis: five riders,
+one free, priced 900 to 9000. Boards keep every handling stat. A character that
+also changed how the game plays would double the balance surface for nothing,
+and would turn the one thing players pick for personality into a thing they have
+to pick for performance — `tests/characters.test.ts` pins the character
+definition's exact shape so a stat cannot quietly appear on one.
+
+Building it surfaced something that had been wrong since the yeti was first
+modelled: **the rider's fur was part of the board.** `buildYeti` took a
+`SkinDef` and read `fur`, `furShade` and `face` off it alongside `board` and
+`boardTrim`, so buying a snowboard recoloured the animal riding it. Boards now
+own the deck and its trim; characters own everything above it, including the
+scarf and the goggle lenses, which were the board's colour for no reason anyone
+would defend. Verified on screen: Shadow on the Classic board is a slate rider
+with a purple scarf standing on an unchanged orange deck.
+
+Old saves migrate to the default rider owned and equipped, which is exactly what
+everyone was already riding — nothing granted, nothing taken away.
+
+---
+
 ## Later, deliberately
 
-- **Characters, not just boards.** Identity is what people screenshot. Boards
-  with stats are the mechanical half; the personality half is missing.
+- **Something to open.** A crate or a spin — now the biggest remaining gap. The
+  genre's reward moment is not the coins, it is the *opening*, and there is
+  still nowhere in this game that has any anticipation in it.
 - **Something to open.** A mystery box or collection set. The genre's reward
   loop is not coins, it is the *moment* of opening.
-- **Onboarding.** No tutorial. The first ten seconds should teach swipe, jump
-  and slide on guaranteed-safe track.
 - **Surface sound.** A grind loop on rails, reverb inside tunnels, wind that
   builds with speed.
 - **Comparison beyond a local best.** Needs a backend, which is out of scope for

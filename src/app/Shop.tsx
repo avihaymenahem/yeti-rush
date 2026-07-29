@@ -10,6 +10,7 @@ import { BoardPreview } from '@/app/BoardPreview';
 import { BoardStatList } from '@/app/BoardStatList';
 import { TapButton } from '@/app/TapButton';
 import { POWER_UP_IDS, powerUpDef, UPGRADE_MAX_LEVEL, upgradePrice } from '@/game/content/powerUps';
+import { CHARACTER_IDS, characterDef } from '@/game/content/characters';
 import { skinsForSale } from '@/game/content/skins';
 import { useMetaStore } from '@/game/state/metaStore';
 
@@ -22,6 +23,8 @@ export function Shop({ onClose }: ShopProps) {
   const buySkin = useMetaStore((state) => state.buySkin);
   const equipSkin = useMetaStore((state) => state.equipSkin);
   const buyUpgrade = useMetaStore((state) => state.buyUpgrade);
+  const buyCharacter = useMetaStore((state) => state.buyCharacter);
+  const equipCharacter = useMetaStore((state) => state.equipCharacter);
 
   return (
     <div className="layer layer-safe panel panel-scroll">
@@ -66,6 +69,51 @@ export function Shop({ onClose }: ShopProps) {
                 )}
 
                 <BoardStatList stats={skin.stats} compact />
+              </li>
+            );
+          })}
+        </ul>
+
+        <h3 className="panel-section">Riders</h3>
+        <p className="panel-note">
+          Looks only. Who you ride as never changes how the board handles - that is
+          what the boards above are for.
+        </p>
+        <ul className="shop-list">
+          {CHARACTER_IDS.map((id) => {
+            const character = characterDef(id);
+            const owned = save.ownedCharacters.includes(id);
+            const equipped = save.equippedCharacter === id;
+
+            return (
+              <li key={id} className="shop-row">
+                {/* Three of the character's four colours, which is enough to
+                    tell them apart in a list without rendering a second yeti. */}
+                <span className="shop-rider" aria-hidden="true">
+                  <span style={{ background: character.fur }} />
+                  <span style={{ background: character.furShade }} />
+                  <span style={{ background: character.accent }} />
+                </span>
+                <span className="shop-name">
+                  {character.name}
+                  <span className="shop-tagline">{character.tagline}</span>
+                </span>
+
+                {equipped ? (
+                  <span className="shop-tag">Equipped</span>
+                ) : owned ? (
+                  <TapButton className="shop-button" onTap={() => equipCharacter(id)}>
+                    Equip
+                  </TapButton>
+                ) : (
+                  <TapButton
+                    className="shop-button"
+                    disabled={save.coins < character.price}
+                    onTap={() => buyCharacter(id)}
+                  >
+                    {character.price.toLocaleString()}
+                  </TapButton>
+                )}
               </li>
             );
           })}

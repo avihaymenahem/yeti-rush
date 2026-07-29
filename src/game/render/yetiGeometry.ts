@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { GLOSS } from '@/game/config/visuals';
+import type { CharacterDef } from '@/game/content/characters';
 import type { SkinDef } from '@/game/content/skins';
 import { assemble, vertexColorMaterial, type Piece } from '@/game/render/mergeParts';
 
@@ -100,8 +101,16 @@ export const YETI_JOINTS = {
 /** Length of one scarf link, so the component can chain them. */
 export const SCARF_LINK_LENGTH = 0.3;
 
-export function buildYeti(skin: SkinDef): YetiParts {
-  const { fur, furShade, face, board, boardTrim } = skin;
+/**
+ * Builds the rider and the board they are standing on.
+ *
+ * Two sources on purpose. The character owns everything above the deck and the
+ * board owns the deck - which is the split that stopped buying a snowboard from
+ * changing the colour of the yeti riding it.
+ */
+export function buildYeti(character: CharacterDef, skin: SkinDef): YetiParts {
+  const { fur, furShade, face, accent } = character;
+  const { board, boardTrim } = skin;
 
   // --- Board -------------------------------------------------------------
   const boardGeometry = assemble([
@@ -159,7 +168,7 @@ export function buildYeti(skin: SkinDef): YetiParts {
     // every link, so a knot there would appear three times.
     {
       geometry: new THREE.BoxGeometry(0.3, 0.13, 0.26),
-      color: board,
+      color: accent,
       position: [0, 0.71, 0.03],
     },
     // Shoulder ruff, a second shorter layer under it, and a skirt at the waist.
@@ -205,7 +214,7 @@ export function buildYeti(skin: SkinDef): YetiParts {
     // of costume the camera sees for the entire run.
     {
       geometry: new THREE.TorusGeometry(0.285, 0.04, 5, 16),
-      color: boardTrim,
+      color: accent,
       rotation: [Math.PI / 2, 0, 0],
       position: [0, 0.29, 0],
     },
@@ -253,7 +262,7 @@ export function buildYeti(skin: SkinDef): YetiParts {
   const scarfGeometry = assemble([
     {
       geometry: new THREE.BoxGeometry(0.21, 0.075, SCARF_LINK_LENGTH),
-      color: board,
+      color: accent,
       position: [0, 0, SCARF_LINK_LENGTH / 2],
     },
   ]);

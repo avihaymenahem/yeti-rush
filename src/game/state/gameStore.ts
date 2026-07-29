@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import { DEFAULT_MODE, type GameModeId } from '@/game/content/modes';
 import type { PowerUpId } from '@/game/content/powerUps';
+import type { CoachHint } from '@/game/systems/coach';
 import type { DeathCause } from '@/game/state/runtime';
 
 /**
@@ -37,6 +38,12 @@ export interface HudSnapshot {
   timeRemaining: number | null;
   /** Seconds left of the avalanche behind the player. Zero when clear. */
   avalanche: number;
+  /** Score riding on the current flight's trick chain. Zero when grounded. */
+  trickPending: number;
+  /** Tricks completed this flight, for sizing the readout. */
+  trickChain: number;
+  /** Which control the opening coach is asking for, or null. */
+  coach: CoachHint | null;
   powerUps: ActivePowerUpView[];
 }
 
@@ -62,6 +69,9 @@ const EMPTY_HUD: HudSnapshot = {
   speed: 0,
   timeRemaining: null,
   avalanche: 0,
+  trickPending: 0,
+  trickChain: 0,
+  coach: null,
   powerUps: [],
 };
 
@@ -107,6 +117,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // actually see is worth a re-render.
       Math.ceil(state.timeRemaining ?? 0) === Math.ceil(snapshot.timeRemaining ?? 0) &&
       Math.ceil(state.avalanche) === Math.ceil(snapshot.avalanche) &&
+      state.trickPending === snapshot.trickPending &&
+      state.coach === snapshot.coach &&
       powerUpSignature(state.powerUps) === powerUpSignature(snapshot.powerUps)
     ) {
       return;

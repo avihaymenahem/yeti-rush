@@ -54,8 +54,17 @@ export async function hideSplash(): Promise<void> {
 export function hideBootSplash(): void {
   const boot = document.getElementById('boot');
   if (!boot) return;
-  boot.classList.add('boot--gone');
-  window.setTimeout(() => boot.remove(), 400);
+
+  // Held for a minimum, counted from when the poster went up rather than from
+  // here - see MIN_VISIBLE_MS in index.html. Handing the native splash over
+  // early made launch quick enough that the poster could come and go inside
+  // half a second, which is worse than not having one.
+  const hold = (window as { __yetiBootHoldMs?: () => number }).__yetiBootHoldMs?.() ?? 0;
+
+  window.setTimeout(() => {
+    boot.classList.add('boot--gone');
+    window.setTimeout(() => boot.remove(), 400);
+  }, hold);
 }
 
 /**

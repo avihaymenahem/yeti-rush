@@ -79,6 +79,10 @@
         box-shadow: 0 0 8px rgba(255, 211, 92, 0.55);
         transform: scaleX(0);
         transform-origin: left center;
+        /* Smooths the fifty-millisecond creep steps into a glide. Overridden to
+           the remaining hold when the bar completes, so a launch that finishes
+           early fills across the wait instead of snapping to the end. */
+        transition: transform 140ms linear;
       }
 
       .boot--gone {
@@ -132,6 +136,22 @@
         var fill = document.getElementById('boot-bar');
         var shown = 0;
         var target = 0.06;
+
+        /*
+         * Shortest time the poster stays up, measured from now.
+         *
+         * Launch got *faster* when the native splash was handed over early, and
+         * on a warm cache the whole sequence can be done inside half a second -
+         * so the poster flashed past before it could be read. A splash exists to
+         * be seen; a minimum is how every shipped game reconciles that with a
+         * fast boot. Long enough to register the title, short enough that nobody
+         * waiting to play resents it.
+         */
+        var MIN_VISIBLE_MS = 1500;
+        var visibleUntil = Date.now() + MIN_VISIBLE_MS;
+        window.__yetiBootHoldMs = function () {
+          return Math.max(0, visibleUntil - Date.now());
+        };
         var timer = setInterval(function () {
           target = Math.min(0.92, target + 0.0035);
           shown += (target - shown) * 0.16;
@@ -142,10 +162,15 @@
         // that goes backwards reads as something having gone wrong.
         window.__yetiBoot = function (value) {
           target = Math.max(target, Math.min(1, value));
-          if (target >= 1) {
-            clearInterval(timer);
-            fill.style.transform = 'scaleX(1)';
-          }
+          if (target < 1) return;
+
+          clearInterval(timer);
+          // Fill across whatever is left of the hold rather than jumping. The
+          // bar and the poster then finish together, which is the difference
+          // between a loading screen and a flicker.
+          var hold = window.__yetiBootHoldMs();
+          fill.style.transitionDuration = Math.max(140, hold) + 'ms';
+          fill.style.transform = 'scaleX(1)';
         };
 
         var poster = document.getElementById('boot-poster');

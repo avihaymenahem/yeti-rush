@@ -21,6 +21,7 @@ import type * as THREE from 'three';
 import { LANES, TUNING } from '@/game/config/tuning';
 import { clamp, clamp01, damp } from '@/game/core/math';
 import { phasesThroughObstacles } from '@/game/content/powerUps';
+import { characterDef } from '@/game/content/characters';
 import { skinDef } from '@/game/content/skins';
 import { buildYeti, SCARF_LINK_LENGTH, YETI_JOINTS } from '@/game/render/yetiGeometry';
 import { useCastShadows } from '@/game/render/useCastShadows';
@@ -84,10 +85,12 @@ function applyGhost(root: THREE.Object3D, material: THREE.MeshPhongMaterial, amo
 }
 
 export function Player() {
-  // The equipped skin is baked into the vertex colours, so changing it rebuilds
-  // the geometry - once, on change, never per frame.
+  // Both are baked into the vertex colours, so changing either rebuilds the
+  // geometry - once, on change, never per frame. Two subscriptions rather than
+  // one on the whole save, so equipping a board does not rebuild the rider.
+  const character = useMetaStore((state) => characterDef(state.save.equippedCharacter));
   const skin = useMetaStore((state) => skinDef(state.save.equippedSkin));
-  const parts = useMemo(() => buildYeti(skin), [skin]);
+  const parts = useMemo(() => buildYeti(character, skin), [character, skin]);
 
   const rootRef = useRef<THREE.Group>(null);
   useCastShadows(rootRef);
@@ -157,6 +160,12 @@ export function Player() {
       ? clamp01(player.y / TUNING.ramp.peakHeight) * Math.PI * 0.75
       : 0;
     root.rotation.y = damp(root.rotation.y, spinTarget, 1e-4, delta);
+
+    // Tricks. Read straight off `player.trickSpin` rather than integrated here,
+    // so the pose is exactly as far round as the scoring believes it is - the
+    // two would drift apart within a flight otherwise, and the rider would land
+    // sideways on a chain the simulation had already banked.
+    root.rotation.x = damp(root.rotation.x, player.trickSpin, 4e-5, delta);
 
     // --- Board -----------------------------------------------------------
     // Nose lifts on the way up and drops on the way down.

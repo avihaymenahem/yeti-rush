@@ -20,6 +20,7 @@ import { POWER_UP_IDS, powerUpDef, type PowerUpTimers } from '@/game/content/pow
 import { gameTimestep } from '@/game/core/gameTimestep';
 import { clamp01 } from '@/game/core/math';
 import { chaserPressure } from '@/game/systems/chaser';
+import { coachHint } from '@/game/systems/coach';
 import { decayFeedback, feedback, punch, resetFeedback } from '@/game/systems/feedback';
 import { isGrounded } from '@/game/systems/player';
 import { applyScreenFlash } from '@/platform/screenFlash';
@@ -41,6 +42,8 @@ import {
   sfxPowerDown,
   sfxPowerUp,
   sfxRamp,
+  sfxTrickFumbled,
+  sfxTrickLanded,
 } from '@/platform/audio';
 import { hapticHeavy, hapticLight, hapticMedium } from '@/platform/haptics';
 
@@ -64,6 +67,8 @@ export function GameLoop() {
   const lastPhasedRef = useRef(0);
   const lastRampsRef = useRef(0);
   const lastNearMissesRef = useRef(0);
+  const lastTricksRef = useRef(0);
+  const lastFumblesRef = useRef(0);
   // Starts grounded, because the run does. Seeded the other way, the first
   // frame of every run would land.
   const wasGroundedRef = useRef(true);
@@ -106,6 +111,8 @@ export function GameLoop() {
       lastPhasedRef.current = 0;
       lastRampsRef.current = 0;
       lastNearMissesRef.current = 0;
+      lastTricksRef.current = 0;
+      lastFumblesRef.current = 0;
       wasGroundedRef.current = true;
       // A fresh run must not open with the last crash still fading over it.
       resetFeedback(feedback);
@@ -114,6 +121,17 @@ export function GameLoop() {
     if (runtime.nearMisses > lastNearMissesRef.current) {
       lastNearMissesRef.current = runtime.nearMisses;
       sfxNearMiss();
+    }
+
+    if (runtime.tricksLanded > lastTricksRef.current) {
+      lastTricksRef.current = runtime.tricksLanded;
+      sfxTrickLanded();
+      hapticMedium();
+    }
+
+    if (runtime.trickFumbles > lastFumblesRef.current) {
+      lastFumblesRef.current = runtime.trickFumbles;
+      sfxTrickFumbled();
     }
 
     // Touchdown, from a jump, a ramp arc or stepping off a rail. Diffed here
@@ -168,6 +186,11 @@ export function GameLoop() {
         speed: runtime.speed,
         timeRemaining: runtime.timeRemaining,
         avalanche: runtime.avalancheTimer,
+        trickPending: runtime.player.pendingTrickScore,
+        trickChain: runtime.player.trickChain,
+        // Only ever computed at publish rate, not per frame - it walks the
+        // nearby track, and ten times a second is well inside a reaction.
+        coach: coachHint(runtime),
         powerUps: activePowerUpViews(runtime.powerUps),
       });
     }

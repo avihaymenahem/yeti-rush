@@ -372,6 +372,68 @@ export const TUNING = {
   },
 
   /**
+   * The opening coach.
+   *
+   * The first ten seconds of a runner teach the three inputs, and this game
+   * taught none of them - a new player was dropped straight onto a generated
+   * slope and had to work out that a downward swipe existed at all.
+   *
+   * Prompts are *reactive*, not scripted. Nothing here lays a tutorial lane:
+   * the hint for jumping appears when something jumpable is genuinely on its
+   * way, so it is read at the moment the input is needed rather than in a
+   * sandbox the player then has to leave. That also means the coach cannot
+   * break anything the generator guarantees, because it does not touch it -
+   * the only thing it asks for is a quiet opening, through `clearUntil`, which
+   * already exists for ramp landings.
+   */
+  coach: {
+    /** Metres of empty snow at the start of a first run, to look around in. */
+    openingClearance: 55,
+    /** Seconds ahead a hazard is spotted, to prompt before it is a problem. */
+    lookaheadSeconds: 1.4,
+    /** Metres after which the coach gives up, taught or not. */
+    givesUpAfter: 900,
+  },
+
+  /**
+   * Tricks off a ramp.
+   *
+   * A ramp launch is twenty-two metres of committed flight in which the player
+   * can only steer - the most dramatic second in the game, and the one where
+   * they had nothing to do. Tricks fill it, and they are the only thing in the
+   * project that adds skill depth without the generator having to know about it
+   * at all: the arc, the landing and the protected track after it are unchanged.
+   *
+   * Restricted to ramp flight on purpose. An ordinary jump is short and its tap
+   * already means something - a tap in the air buffers the next jump so it fires
+   * on touchdown, which is a feel feature worth more than tricks would be there.
+   * A ramp flight is the one span where a tap currently does nothing at all.
+   *
+   * The risk is entirely in the chain. Landing mid-rotation forfeits the whole
+   * flight's tricks, so the decision is always "one more?" and the cost of being
+   * greedy is everything already earned - never the run itself, because that
+   * would turn an optional route into a trap.
+   */
+  tricks: {
+    /**
+     * Seconds one rotation takes.
+     *
+     * Set against the arc, which is defined in *distance* and so gets shorter
+     * as the run speeds up: about a second of hang at the opening pace and two
+     * thirds of one at top speed. That works out at three or four tricks early
+     * and two later, which is the right way round - the chain gets harder to
+     * extend exactly as the player gets better at reading the ramp.
+     */
+    duration: 0.25,
+    /** Score for the first trick of a flight. */
+    baseScore: 120,
+    /** Each further trick in the same flight is worth this much again. */
+    chainGrowth: 1.6,
+    /** Longest chain worth attempting; further taps are ignored. */
+    maxChain: 5,
+  },
+
+  /**
    * The avalanche.
    *
    * Fifteen seconds, every so often, where the rules change: the patrol is

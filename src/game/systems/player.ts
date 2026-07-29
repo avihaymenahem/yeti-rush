@@ -45,6 +45,26 @@ export interface PlayerState {
   grindFromZ: number;
   /** Lane the rail being ridden is in; steering out of it ends the grind. */
   grindLane: number;
+
+  /**
+   * Seconds left of the rotation being performed. Zero when not mid-trick.
+   *
+   * Landing with this above zero forfeits the flight's tricks, which is the
+   * entire risk in the mechanic.
+   */
+  trickTimer: number;
+  /** Tricks completed in the current flight. */
+  trickChain: number;
+  /** Score earned this flight, banked on a clean landing and lost otherwise. */
+  pendingTrickScore: number;
+  /**
+   * Total rotation performed this flight, in radians, for the renderer.
+   *
+   * Kept here rather than in the render layer so the pose is a function of
+   * simulation state like every other joint angle - a rotation the renderer
+   * owned would drift out of step with the scoring the moment either changed.
+   */
+  trickSpin: number;
 }
 
 export function createPlayerState(): PlayerState {
@@ -61,6 +81,10 @@ export function createPlayerState(): PlayerState {
     flightHeight: 0,
     grindFromZ: 0,
     grindLane: -1,
+    trickTimer: 0,
+    trickChain: 0,
+    pendingTrickScore: 0,
+    trickSpin: 0,
   };
 }
 
@@ -77,6 +101,70 @@ export function resetPlayerState(player: PlayerState): void {
   player.flightHeight = 0;
   player.grindFromZ = 0;
   player.grindLane = -1;
+  clearTricks(player);
+}
+
+/** Ends the flight's trick chain, keeping nothing. */
+export function clearTricks(player: PlayerState): void {
+  player.trickTimer = 0;
+  player.trickChain = 0;
+  player.pendingTrickScore = 0;
+  player.trickSpin = 0;
+}
+
+/** Score for the nth trick of a flight, counting from zero. */
+export function trickValue(chain: number): number {
+  const { baseScore, chainGrowth } = TUNING.tricks;
+  return Math.round(baseScore * Math.pow(chainGrowth, chain));
+}
+
+/**
+ * Starts a rotation, if there is one to start.
+ *
+ * Only during a ramp flight, and only one at a time - a second tap mid-rotation
+ * is dropped rather than queued. Queuing would let a player mash through the
+ * whole chain on the way up and take none of the risk the chain is made of.
+ */
+export function requestTrick(player: PlayerState): boolean {
+  if (!player.ramping || player.motion !== 'airborne') return false;
+  if (player.trickTimer > 0) return false;
+  if (player.trickChain >= TUNING.tricks.maxChain) return false;
+
+  player.trickTimer = TUNING.tricks.duration;
+  return true;
+}
+
+/** What a tap turned out to mean. Callers use it to pick a sound. */
+export type TapResult = 'trick' | 'jump' | 'none';
+
+/**
+ * Resolves a tap into whatever it means from here.
+ *
+ * A single place on purpose. The gesture handler and the dev bridge both send
+ * taps, and when the trick priority lived only in the gesture handler the
+ * bridge quietly stopped being able to reproduce what a player does - which is
+ * the one job it has.
+ *
+ * A trick wins over a jump during a ramp flight. Safe even with the Snow Angel
+ * double jump available: a ramp arc lands on track the spawner has cleared, so
+ * there is never anything down there the second jump was needed for.
+ */
+export function tap(player: PlayerState, allowDoubleJump = false): TapResult {
+  if (requestTrick(player)) return 'trick';
+  return requestJump(player, allowDoubleJump) ? 'jump' : 'none';
+}
+
+/**
+ * Banks the flight's tricks, or loses them.
+ *
+ * Called on touchdown. Mid-rotation means the landing was blown, and the whole
+ * chain goes - not just the unfinished one. That is what makes the last tap of
+ * a flight a real decision rather than free money.
+ */
+export function settleTricks(player: PlayerState): number {
+  const banked = player.trickTimer > 0 ? 0 : player.pendingTrickScore;
+  clearTricks(player);
+  return banked;
 }
 
 export function isGrounded(player: PlayerState): boolean {
@@ -298,7 +386,29 @@ export function stepGrind(
 }
 
 /** Advances vertical motion and pose by one fixed sim step. */
+/** Advances the rotation in progress, completing it if it runs out. */
+function stepTrick(player: PlayerState, dt: number): void {
+  if (player.trickTimer <= 0) return;
+
+  const before = player.trickTimer;
+  player.trickTimer -= dt;
+  // Snapped rather than clamped at zero. Fifteen subtractions of 1/60 from 0.25
+  // leave a residue around 1e-17, which is positive - so a plain `Math.max(0,
+  // ...)` would hold the rotation open for one more tick and, worse, would
+  // report a trick as unfinished on the exact frame the player landed it.
+  if (player.trickTimer <= 1e-9) player.trickTimer = 0;
+  // A full turn per trick, spread across its duration, so the pose is always
+  // exactly as far round as the scoring believes it is.
+  player.trickSpin += ((before - player.trickTimer) / TUNING.tricks.duration) * Math.PI * 2;
+
+  if (player.trickTimer === 0) {
+    player.pendingTrickScore += trickValue(player.trickChain);
+    player.trickChain++;
+  }
+}
+
 export function stepPlayer(player: PlayerState, dt: number): void {
+  stepTrick(player, dt);
   if (player.jumpBuffer > 0) player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
 
   switch (player.motion) {

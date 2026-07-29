@@ -29,6 +29,7 @@ import {
   resetChaser,
   stepChaser,
 } from '@/game/systems/chaser';
+import { noteLearned } from '@/game/systems/coach';
 import { aabbOverlap, distanceSquared, withinZWindow } from '@/game/systems/collision';
 import { speedAt, tierAt } from '@/game/systems/difficulty';
 import { laneToX, stepLane } from '@/game/systems/lanes';
@@ -39,6 +40,7 @@ import {
   launchFromRamp,
   mountRail,
   startFlight,
+  settleTricks,
   stepGrind,
   stepPlayer,
   writePlayerAabb,
@@ -119,7 +121,21 @@ export function tickRun(rt: RuntimeState, dt: number): void {
 
   stepLane(rt.lane, dt, rt.board.control);
   rideRail(rt);
+
+  // Tricks are settled here rather than inside `stepPlayer`, which has no
+  // runtime to pay into. Keyed on becoming grounded rather than on the ramp
+  // ending, so a flight cut short by a double jump still banks what it earned.
+  const wasAirborne = !isGrounded(rt.player);
   stepPlayer(rt.player, dt);
+  if (wasAirborne && isGrounded(rt.player) && rt.player.trickChain + rt.player.trickTimer > 0) {
+    const banked = settleTricks(rt.player);
+    if (banked > 0) {
+      rt.trickScore += banked;
+      rt.tricksLanded++;
+    } else {
+      rt.trickFumbles++;
+    }
+  }
   // Not while an avalanche is holding it in place, and not while the player is
   // down - see `stepChaser` for why the second one matters.
   if (rt.avalancheTimer <= 0) stepChaser(rt.chaser, dt, rt.board.grip, rt.stumbleTimer <= 0);
@@ -149,6 +165,8 @@ export function tickRun(rt: RuntimeState, dt: number): void {
   collectPickups(rt);
   collectCoins(rt);
   updateScore(rt);
+  // Last, so it sees the state this tick actually ended in.
+  noteLearned(rt);
 }
 
 /**
@@ -503,6 +521,9 @@ function updateScore(rt: RuntimeState): void {
   // Paid on the way out of an avalanche rather than during it, so the reward is
   // for surviving one and not for being inside one.
   const avalancheScore = rt.avalanchesSurvived * TUNING.avalanche.bonus;
+  // Flat, like the phase bonus: tricks already have their own escalation in the
+  // chain, and multiplying that by the combo as well compounds twice.
+  const trickScore = rt.trickScore;
   // Flat, and outside the combo multiplier. A near miss is already its own
   // reward curve - they cluster in the dense late track where the multiplier is
   // highest anyway, and multiplying them too turns a good run into a runaway.
@@ -510,7 +531,7 @@ function updateScore(rt: RuntimeState): void {
   // The mode multiplier is applied last, over the whole run, so a harder mode
   // is worth playing rather than just harder.
   rt.score = Math.floor(
-    (distanceScore + coinScore + phaseScore + nearMissScore + avalancheScore) * rt.mode.scoreMultiplier,
+    (distanceScore + coinScore + phaseScore + nearMissScore + avalancheScore + trickScore) * rt.mode.scoreMultiplier,
   );
 }
 

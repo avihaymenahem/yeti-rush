@@ -62,6 +62,12 @@ export interface RuntimeState {
   rampLaunches: number;
   /** Rails ridden this run. Counts mounts, not distance grinded. */
   railGrinds: number;
+  /** Score banked from tricks landed cleanly off ramps. */
+  trickScore: number;
+  /** Flights landed with the chain intact. */
+  tricksLanded: number;
+  /** Flights landed mid-rotation, losing the chain. For the renderer to react. */
+  trickFumbles: number;
   /** Obstacles ridden straight through on the ghost board. */
   phased: number;
   /**
@@ -76,6 +82,16 @@ export interface RuntimeState {
   stumbles: number;
   /** Revives bought this run. Drives the escalating price. */
   revives: number;
+  /** True while this run is teaching the controls. */
+  coaching: boolean;
+  /**
+   * Inputs the player has demonstrated this run.
+   *
+   * Inferred from the player's state rather than plumbed through from the
+   * gesture handler, so a keyboard, a swipe and the dev bridge all count the
+   * same - and the coach cannot be fooled by an input that was rejected.
+   */
+  learned: { move: boolean; jump: boolean; slide: boolean };
   /** Seconds left of the avalanche behind the player. Zero when clear. */
   avalancheTimer: number;
   /** Metres at which the next avalanche starts. */
@@ -152,10 +168,15 @@ function createRuntimeState(seed: number): RuntimeState {
     multiplier: 1,
     rampLaunches: 0,
     railGrinds: 0,
+    trickScore: 0,
+    tricksLanded: 0,
+    trickFumbles: 0,
     phased: 0,
     nearMisses: 0,
     stumbles: 0,
     revives: 0,
+    coaching: false,
+    learned: { move: false, jump: false, slide: false },
     avalancheTimer: 0,
     nextAvalancheAt: TUNING.avalanche.firstAt,
     avalanchesSurvived: 0,
@@ -213,10 +234,17 @@ export function resetRuntime(
   runtime.multiplier = 1;
   runtime.rampLaunches = 0;
   runtime.railGrinds = 0;
+  runtime.trickScore = 0;
+  runtime.tricksLanded = 0;
+  runtime.trickFumbles = 0;
   runtime.phased = 0;
   runtime.nearMisses = 0;
   runtime.stumbles = 0;
   runtime.revives = 0;
+  runtime.coaching = false;
+  runtime.learned.move = false;
+  runtime.learned.jump = false;
+  runtime.learned.slide = false;
   runtime.avalancheTimer = 0;
   runtime.nextAvalancheAt = TUNING.avalanche.firstAt;
   runtime.avalanchesSurvived = 0;

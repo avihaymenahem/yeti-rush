@@ -19,6 +19,7 @@ import {
   type RunStats,
 } from '@/game/content/missions';
 import { UPGRADE_MAX_LEVEL, upgradePrice, type PowerUpId } from '@/game/content/powerUps';
+import { characterDef } from '@/game/content/characters';
 import { skinDef } from '@/game/content/skins';
 import {
   canClaimDaily,
@@ -54,6 +55,8 @@ interface MetaStore {
   commitRun: (stats: RunStats & { score: number; mode: string }) => void;
   buySkin: (id: string) => boolean;
   equipSkin: (id: string) => boolean;
+  buyCharacter: (id: string) => boolean;
+  equipCharacter: (id: string) => boolean;
   buyUpgrade: (id: PowerUpId) => boolean;
   /**
    * Takes coins for something bought mid-run. Returns false and changes
@@ -64,6 +67,8 @@ interface MetaStore {
    * revive, which is paid for and then simply gone.
    */
   spendCoins: (amount: number) => boolean;
+  /** Retires the opening coach, permanently. */
+  markCoached: () => void;
   /** Claims a completed mission's reward. Returns the coins paid, or 0. */
   claimMission: (id: string) => number;
   /** Claims the daily login reward. Returns the coins paid, or 0. */
@@ -205,12 +210,58 @@ export const useMetaStore = create<MetaStore>((set, get) => ({
     return true;
   },
 
+  markCoached: () => {
+    const { save } = get();
+    if (save.coached) return;
+
+    const next: SaveData = { ...save, coached: true };
+    set({ save: next });
+    scheduleWrite(next);
+  },
+
   spendCoins: (amount) => {
     const { save } = get();
     const price = Math.max(0, Math.round(amount));
     if (save.coins < price) return false;
 
     const next: SaveData = { ...save, coins: save.coins - price };
+    set({ save: next });
+    scheduleWrite(next);
+    return true;
+  },
+
+  /*
+   * Characters mirror boards exactly, deliberately down to the shape of the
+   * code. They buy nothing mechanical - a character is who you are, a board is
+   * how you ride - so there is no stat path to keep in step, and anything that
+   * is true of one purchase should be true of the other.
+   */
+  buyCharacter: (id) => {
+    const { save } = get();
+    const def = characterDef(id);
+    if (def.id !== id) return false;
+    if (save.ownedCharacters.includes(id)) return false;
+    if (save.coins < def.price) return false;
+
+    const next: SaveData = {
+      ...save,
+      coins: save.coins - def.price,
+      ownedCharacters: [...save.ownedCharacters, id],
+      // Bought is equipped. Nobody buys a character to look at it in a list.
+      equippedCharacter: id,
+    };
+
+    set({ save: next });
+    scheduleWrite(next);
+    return true;
+  },
+
+  equipCharacter: (id) => {
+    const { save } = get();
+    if (!save.ownedCharacters.includes(id)) return false;
+    if (save.equippedCharacter === id) return false;
+
+    const next: SaveData = { ...save, equippedCharacter: id };
     set({ save: next });
     scheduleWrite(next);
     return true;

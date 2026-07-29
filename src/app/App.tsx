@@ -33,13 +33,14 @@ import { useMetaStore } from '@/game/state/metaStore';
 import { runtime } from '@/game/state/runtime';
 import type { Gesture } from '@/game/systems/input';
 import { requestLaneChange } from '@/game/systems/lanes';
-import { requestJump, requestSlide } from '@/game/systems/player';
+import { requestSlide, tap } from '@/game/systems/player';
 import {
   setMusicVolume,
   setSfxVolume,
   sfxJump,
   sfxLaneChange,
   sfxSlide,
+  sfxTrick,
   unlockAudio,
 } from '@/platform/audio';
 import { hapticLight, hapticMedium, setHapticsEnabled } from '@/platform/haptics';
@@ -115,12 +116,15 @@ export function App() {
         }
         break;
       case 'up':
-      case 'tap':
-        if (requestJump(runtime.player, allowsDoubleJump(runtime.powerUps))) {
-          hapticLight();
-          sfxJump();
-        }
+      case 'tap': {
+        // What a tap means is decided in one place - see `tap` in systems/player.
+        const result = tap(runtime.player, allowsDoubleJump(runtime.powerUps));
+        if (result === 'none') break;
+        hapticLight();
+        if (result === 'trick') sfxTrick(runtime.player.trickChain);
+        else sfxJump();
         break;
+      }
       case 'down':
         if (requestSlide(runtime.player)) {
           hapticMedium();

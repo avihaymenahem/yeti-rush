@@ -490,6 +490,30 @@ function collectCoins(rt: RuntimeState): void {
   const radius = TUNING.coins.pickupRadius * coinPickupMultiplier(rt.powerUps);
   const radiusSquared = radius * radius;
 
+  /*
+   * Height is ignored while flying, and that is the whole chairlift.
+   *
+   * The lift holds the rider five metres up; coins sit at 0.9 and arc to about
+   * 2.1. A sphere of the chairlift's widened radius - 4.4 - centred on someone
+   * four metres above the piste barely grazes it, so the ride collected almost
+   * nothing while *visibly* hoovering coins in: the renderer draws the pull
+   * from fourteen metres away, so the player watched a line of coins fly up to
+   * their chest, arrive, and not count. Reported exactly that way.
+   *
+   * Widening the radius until a sphere reached the ground would make the
+   * chairlift also collect from two lanes over at ground level, which is a
+   * different power-up. What the chairlift is *for* is sweeping the line it
+   * flies along, so vertical separation stops being a miss for as long as the
+   * separation is the mechanic.
+   *
+   * Only *downwards*, though. The drop to the piste is forgiven because the
+   * lift is what put it there; a coin hanging above the lift is not owed to
+   * anyone, and "height never matters while flying" is the kind of rule that
+   * looks equivalent today and stops being so the moment anything is spawned
+   * overhead.
+   */
+  const flying = flightHeight(rt.powerUps) !== null;
+
   for (const coin of rt.track.coins) {
     if (!coin.active) continue;
 
@@ -497,7 +521,7 @@ function collectCoins(rt: RuntimeState): void {
     if (!withinZWindow(worldZ, TUNING.player.z, radius)) continue;
 
     entity.x = laneToX(coin.lane);
-    entity.y = coin.y;
+    entity.y = flying && coin.y < player.y ? player.y : coin.y;
     entity.z = worldZ;
 
     if (distanceSquared(player, entity) <= radiusSquared) {

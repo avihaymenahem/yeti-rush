@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import { TUNING } from '@/game/config/tuning';
 import { coinGeometry } from '@/game/render/propGeometry';
 import { RECYCLE_Z, SPAWN_Z } from '@/game/render/trackLayout';
-import { coinPickupMultiplier } from '@/game/content/powerUps';
+import { coinPickupMultiplier, flightHeight } from '@/game/content/powerUps';
 import { runtime } from '@/game/state/runtime';
 import { laneToX } from '@/game/systems/lanes';
 import { MAX_COINS, worldZOf } from '@/game/systems/spawner';
@@ -49,6 +49,10 @@ export function CoinField() {
     const px = runtime.lane.x;
     const py = runtime.player.y + TUNING.player.halfHeight;
     const pz = TUNING.player.z;
+    // Matches `collectCoins`: while flying, the drop to the piste is not part of
+    // the reach. Measuring it here as well is what keeps the arrival and the
+    // pickup on the same frame - the coin must not reach the rider and linger.
+    const flying = flightHeight(runtime.powerUps) !== null;
 
     let written = 0;
     for (const coin of runtime.track.coins) {
@@ -65,7 +69,10 @@ export function CoinField() {
         const dx = px - x;
         const dy = py - y;
         const dz = pz - z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        // The offsets below still lift the coin to the rider; only the *reach*
+        // forgives the drop, so the coin flies up and is collected as it lands.
+        const reachDy = flying && y < py ? 0 : dy;
+        const distance = Math.sqrt(dx * dx + dz * dz + reachDy * reachDy);
 
         if (distance < range) {
           // Scaled so the coin arrives exactly as it is collected: at the pickup

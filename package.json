@@ -1,7 +1,7 @@
 {
   "name": "yeti-rush",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "description": "Yeti Rush - a 3-lane snow endless runner",
   "scripts": {
@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write \"{src,tests}/**/*.{ts,tsx,css}\"",
     "splash": "node scripts/generate-splash.mjs",
+    "icon": "node scripts/generate-icon.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run lint && npm run test",
@@ -29,6 +30,7 @@
     "@capacitor/status-bar": "^8.0.3",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@tanstack/react-router": "^1.170.18",
     "lucide-react": "^1.27.0",
     "react": "~19.2.8",
     "react-dom": "~19.2.8",

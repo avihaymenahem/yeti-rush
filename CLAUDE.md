@@ -21,6 +21,11 @@ object (`game/state/runtime.ts`), advanced by exactly one `useFrame` in
 through refs. React renders HUD and menus only, from a ~10 Hz snapshot. If a
 change would re-render React per frame, it is the wrong change.
 
+The Canvas mounts once for the whole session. `App` is the router's **root
+route** precisely so a navigation cannot unmount it — put it inside a route and
+every screen change tears down a WebGL context. Menus are DOM pages over a live
+scene, never separate views.
+
 **2. The player never moves forward.** The player sits at `z = 0` and the world
 scrolls past. Entity positions are absolute track distances; world Z is derived
 via `worldZOf(trackZ, distance)`. Never give the player a forward position.
@@ -137,6 +142,43 @@ grep -o 'index-[A-Za-z0-9_-]*\.js' dist/index.html android/app/src/main/assets/p
 ```
 
 A stale APK has more than once looked exactly like a fix that did not work.
+
+### Release builds
+
+The release type is signed from `android/keystore.properties`, which is not in
+git and never may be — Play accepts updates signed by the upload key and no
+other, for the life of the listing, so leaking it and losing it cost the same
+thing. Without that file the release build comes out **unsigned**, deliberately:
+falling back to the debug key is the bug this replaced, and it would surface at
+the Play Console instead of here.
+
+Play takes an App Bundle, not an APK: `./gradlew.bat bundleRelease`.
+
+`tests/release.test.ts` guards the things that fail silently — the version in
+`build.gradle` agreeing with `package.json`, the permission set staying at
+exactly INTERNET and VIBRATE, `appCategory="game"` staying next to the portrait
+lock, and no `fetch` appearing anywhere in `src/`. That last one is not
+housekeeping: the Data safety declaration filed with Google says the game never
+touches a network, and one future feature could quietly make that false.
+
+[`store/README.md`](store/README.md) has the listing copy and the pre-worked
+console answers.
+
+## Icons
+
+`npm run icon` cuts the launcher icons, the favicon and the store artwork from
+the same `assets/splash.png` the splash uses. Never hand-edit the output.
+
+The app shipped Ionic's Capacitor logo for eight releases, so `tests/icon.test.ts`
+now asserts the committed PNGs really are a crop of the poster.
+
+Two non-obvious constraints:
+
+- **The adaptive foreground is cut wider than the icon it shows.** Android hands
+  the launcher a 108dp layer and displays the middle 72dp; generating that layer
+  from the visible crop puts a circular mask through the yeti's crown.
+- **The icon is the head, not the rider.** At 48dp the whole figure is a pale
+  smudge. Only the crown silhouette and the red scarf survive that size.
 
 ## Shadows
 

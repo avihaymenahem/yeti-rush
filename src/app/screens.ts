@@ -1,12 +1,44 @@
 /**
- * The screens the shell can show outside a run.
+ * The screens the shell can show outside a run, and the URLs they live at.
  *
  * Kept in its own module so `App` can route on it without every screen
- * importing the shell, and so adding a screen is one entry here plus one case
- * in the shell.
+ * importing the shell, and so adding a screen is one entry here plus one route.
  */
 
 export type Screen = 'home' | 'shop' | 'missions' | 'scores' | 'settings';
+
+/**
+ * Screen to path, and back.
+ *
+ * One table rather than a path string typed into each route file, because the
+ * two directions have to agree: the router decides what is *shown* from the
+ * path, and the Android back button decides what to *do* from the screen. Two
+ * hand-maintained lists of the same five strings is a bug with a schedule.
+ */
+export const SCREEN_PATHS: Readonly<Record<Screen, string>> = {
+  home: '/',
+  shop: '/shop',
+  missions: '/missions',
+  scores: '/scores',
+  settings: '/settings',
+};
+
+/**
+ * Which screen a path is showing.
+ *
+ * Anything unrecognised is home. A player who lands on a stale or mistyped URL
+ * gets the menu, not a blank layer over a running game - and on the web demo
+ * that URL is shareable, so it will happen.
+ */
+export function screenForPath(pathname: string): Screen {
+  // Trailing slashes and the Pages subpath both arrive here; only the last
+  // segment is ours.
+  const normalised = `/${pathname.split('/').filter(Boolean).pop() ?? ''}`;
+  const match = (Object.keys(SCREEN_PATHS) as Screen[]).find(
+    (screen) => SCREEN_PATHS[screen] === normalised,
+  );
+  return match ?? 'home';
+}
 
 /** What the Android back button should do from where the player is now. */
 export type BackAction = 'close-screen' | 'pause-run' | 'resume-menu' | 'exit-app';
@@ -14,12 +46,11 @@ export type BackAction = 'close-screen' | 'pause-run' | 'resume-menu' | 'exit-ap
 /**
  * Resolves the back button against the current state.
  *
- * A pure function rather than a router, because that is the whole of what a
- * router would have given us here. These screens are modal layers over one
- * persistent canvas - there is nothing to address and nothing to deep-link to -
- * so a history stack would only be a second copy of `screen` to keep in step
- * with the first. What is genuinely worth getting right is the *decision*, and
- * a decision is testable without a dependency.
+ * Still a pure function even though there is now a real router underneath, and
+ * deliberately so: the decision depends on the *run phase* as much as on the
+ * location, and no router knows whether the player is mid-jump. Handing back to
+ * history would exit the app from a paused run, because the run is not a
+ * history entry. So the router owns the URL and this owns the decision.
  *
  * Only the home screen with no run in progress falls through to leaving the
  * app, which is the one place an Android player expects back to mean quit.

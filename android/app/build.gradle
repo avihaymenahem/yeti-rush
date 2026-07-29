@@ -1,5 +1,38 @@
 apply plugin: 'com.android.application'
 
+/*
+ * Release signing.
+ *
+ * Every release so far has been debug signed, which Play rejects outright - and
+ * which is also why the APKs attached to the GitHub releases say "debug" on
+ * them. This reads the real key from `android/keystore.properties`, which is
+ * gitignored along with the keystore itself.
+ *
+ * The key is deliberately not in this repository and must never be. Losing it
+ * and leaking it have the same consequence: Play will not accept an update
+ * signed by anything else, so the app can never be updated again under that
+ * listing. Create it once, back it up somewhere that is not this machine:
+ *
+ *   keytool -genkeypair -v -keystore yeti-rush-upload.jks -alias upload \
+ *           -keyalg RSA -keysize 2048 -validity 10000
+ *
+ * then write android/keystore.properties:
+ *
+ *   storeFile=../yeti-rush-upload.jks
+ *   storePassword=...
+ *   keyAlias=upload
+ *   keyPassword=...
+ *
+ * Without that file the release build is simply unsigned. That is on purpose:
+ * falling back to the debug key would reproduce the exact problem this fixes,
+ * quietly, and the failure would surface at the Play Console instead of here.
+ */
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace = "com.threedev.yetirush"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +40,8 @@ android {
         applicationId "com.threedev.yetirush"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "0.8.0"
+        versionCode 10
+        versionName "0.9.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +49,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : null
+            // R8 is off. Capacitor plugins are reached by reflection from the
+            // bridge, so shrinking needs a keep-rule pass verified on a device -
+            // and the app is a web bundle, so there is almost no Java to shrink.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

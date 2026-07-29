@@ -53,9 +53,14 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+#
+# The template ships these commented out, which means a keystore dropped in here
+# gets committed on the next `git add .`. An upload key in a public repository
+# cannot be rotated: Play accepts updates signed by that key and no other, so
+# publishing it hands anyone the ability to sign as this app. Not optional.
+*.jks
+*.keystore
+keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

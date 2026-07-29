@@ -6,8 +6,19 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   android: {
     backgroundColor: '#5ea3d4',
-    // Lets us attach chrome://inspect to the WebView. Turn off for release builds.
-    webContentsDebuggingEnabled: true,
+    /*
+     * `webContentsDebuggingEnabled` is deliberately absent.
+     *
+     * It used to be set to `true` so chrome://inspect could attach, with a
+     * comment saying to turn it off before release - which is a reminder, not a
+     * mechanism, and it shipped in all eight releases. A release build with an
+     * inspectable WebView hands anyone with the phone a console inside the app.
+     *
+     * Omitting the key is better than setting it false: Capacitor defaults it
+     * to whether the app is debuggable (`CapConfig.java`, the `isDebug`
+     * fallback), so debug builds stay inspectable and release builds do not,
+     * with nothing to remember either way.
+     */
   },
   plugins: {
     SplashScreen: {

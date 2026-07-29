@@ -1,6 +1,7 @@
+import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from '@/app/App';
+import { router } from '@/app/router';
 import { BOOT_STEPS, handOverToPoster, setBootProgress } from '@/platform/shell';
 import './index.css';
 
@@ -9,9 +10,11 @@ if (!container) throw new Error('Root element #root not found');
 
 setBootProgress(BOOT_STEPS.bundle);
 
+// The router's root route is the app shell, so the Canvas is mounted once by
+// the router and survives every navigation. See `app/router.tsx`.
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <RouterProvider router={router} />
   </StrictMode>,
 );
 

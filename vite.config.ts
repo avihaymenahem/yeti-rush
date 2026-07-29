@@ -1,8 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
+// Read rather than imported: a JSON import here would be pulled into the config
+// bundle differently across Node versions, and this only needs one field.
+const { version } = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version: string };
+
 export default defineConfig({
+  // Substituted into the credits screen. `android/app/build.gradle` carries the
+  // same number by hand, and `tests/release.test.ts` fails if they disagree.
+  define: { __APP_VERSION__: JSON.stringify(version) },
   /**
    * Where the bundle believes it is served from.
    *

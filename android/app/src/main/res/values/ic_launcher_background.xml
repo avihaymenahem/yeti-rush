@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    The layer behind the adaptive icon.
+
+    Sampled by `npm run icon`, which writes the same value into assets/icon.json
+    for tests/icon.test.ts to check against. It is the mean colour of the
+    foreground art, so it cannot drift away from the icon sitting on top of it.
+
+    That foreground is opaque and full-bleed, so in practice this is never seen.
+    It is sampled rather than left at the scaffold's white because "never seen"
+    is a claim about every launcher that will ever exist, and the cost of being
+    wrong about one is a white flash behind a pale blue icon.
+-->
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_background">#9fb0c3</color>
 </resources>

@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        `appCategory` is not cosmetic here.
+
+        From Android 16 (which this app targets), orientation, aspect-ratio and
+        resizability restrictions are ignored on any display at least 600dp
+        wide - so `screenOrientation="portrait"` below stops working on tablets
+        and unfolded foldables, and a three-lane runner laid out for a portrait
+        phone ends up stretched across a landscape one. Games are exempt from
+        that change, and the flag is how the platform knows this is a game.
+
+        The general escape hatch is the PROPERTY_COMPAT_ALLOW_RESTRICTED_-
+        RESIZABILITY manifest property, which is the wrong tool: it is removed
+        in API 37, whereas the exemption is not going anywhere.
+    -->
     <application
         android:allowBackup="true"
+        android:appCategory="game"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

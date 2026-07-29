@@ -41,6 +41,7 @@ npm run dev
 | `npm test` | Vitest suite |
 | `npm run build` | Production web bundle into `dist/` |
 | `npm run splash` | Rebuild the launch splash from `assets/splash.png` |
+| `npm run icon` | Rebuild the launcher, favicon and store artwork from the same poster |
 | `npm run cap:sync` | Build and copy the bundle into the native projects |
 | `npm run cap:android` | Build, sync and launch on a connected Android device |
 
@@ -96,12 +97,35 @@ Time Attack score and an Endless score are not comparable, and one pooled table
 would make the timed modes look worthless. The leaderboard trims per mode too,
 so a strong run in one can never evict another mode's history.
 
-### Screens
+### Screens and routing
 
 Home is a full screen rather than a card over the game - it is where a session
-starts and where the player returns between runs. From it: Play, Boards, Daily,
-Scores and Settings. The 3D scene keeps running behind every screen, dimmed by a
-scrim, because the Canvas is never unmounted.
+starts and where the player returns between runs. From it: Play, Shop, Daily,
+Scores and Settings. The 3D scene keeps running behind every screen, because the
+Canvas is never unmounted.
+
+Those four menus are **routes**, served by TanStack Router from `app/router.tsx`,
+and each is a full-screen page with a header that does not scroll (`app/Page.tsx`)
+rather than a card floating over a dimmed game. A card is the shape of a dialog,
+and a dialog is a promise that there is not much in it - which stopped being true
+the moment the shop had fourteen items and three tabs.
+
+Two things about the routing are load-bearing:
+
+- **The root route is the app shell.** `App` is what the router mounts at the
+  top, so the `<Canvas>` belongs to the router's own root and survives every
+  navigation. Mount it inside a route and each screen change would tear down a
+  WebGL context, which is slow on mobile and leaks on some Android WebViews.
+- **Hash history, not browser history.** Pages serves the demo from a repository
+  subpath with no rewrite rules and the Android WebView serves from Capacitor's
+  asset server; neither can resolve `/shop` on a reload. A hash keeps the route
+  on the client side of the request and needs no host configuration at all.
+
+The run phase is deliberately *not* a route. Riding, paused, dead and being
+offered a revive come from the simulation store, because a run is not something
+you can link to - and if back were handed to history, a back press out of a
+paused game would quit the app. `backTarget` in `app/screens.ts` combines the
+two and is tested on its own.
 
 The leaderboard is **local**. There is no backend, so it is the player's own best
 runs on that device, and the screen says so - a "leaderboard" someone assumes is
@@ -453,6 +477,37 @@ The web half is written into `index.html` rather than rendered by React, because
 React is the thing being waited for. It is dismissed on the same first-frame
 signal as the native splash, with a ten-second failsafe so a bundle that throws
 leaves a blank screen rather than a hung poster.
+
+### The icons
+
+`npm run icon` cuts the launcher icons, the browser favicon and the store
+artwork out of the same poster, so all of it moves together when the art does.
+
+The app wore Ionic's Capacitor logo for its first eight releases, which is what
+`npx cap add android` leaves behind and which nothing overwrote — a wrong icon
+breaks no test, fails no build and is only visible on a home screen. That is
+what [`tests/icon.test.ts`](tests/icon.test.ts) is for: it compares the
+committed PNGs against a crop of the poster and fails if they are not it.
+
+Two things in the generator are not obvious. The icon is the yeti's *head*, not
+the rider — at 48dp the full figure is a pale smudge, and only the crown and the
+red scarf survive that size. And the adaptive foreground is cut wider than the
+icon it shows, because Android hands the launcher a 108dp layer and displays the
+middle 72dp of it; generate that layer from the visible crop and every device
+masking to a circle quietly shaves the crown off.
+
+### Shipping to Google Play
+
+[`store/README.md`](store/README.md) holds the listing copy, the generated
+artwork and pre-worked answers for every App content section. The parts a
+repository cannot do — the upload key, the twelve-tester closed test, and
+screenshots from a real device — are listed at the top of it.
+
+The privacy policy is [`public/privacy.html`](public/privacy.html), published by
+the same Pages workflow as the demo. It claims the game collects nothing and
+never touches the network; [`tests/release.test.ts`](tests/release.test.ts)
+scans the source for `fetch`, `WebSocket`, `sendBeacon` and friends so that
+claim cannot quietly stop being true after it has been filed with Google.
 
 ## Models
 

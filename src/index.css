@@ -975,6 +975,27 @@ canvas {
   filter: brightness(0.94);
 }
 
+/*
+ * The one-line credit under the Settings button.
+ *
+ * Sized to be read only by someone who went looking for it. A full Credits
+ * section here pushed the panel into scrolling, and a courtesy attribution is
+ * not worth making the settings screen worse to use.
+ */
+.panel-colophon {
+  /*
+   * The negative bottom margin is the point. The card already carries 28px of
+   * bottom padding, and a credit line that added its own height on top of that
+   * pushed Settings into scrolling on a 640px-tall phone. Pulled up into the
+   * padding it costs the layout nothing, and hugging the bottom edge is how a
+   * colophon should sit anyway.
+   */
+  margin: 0.4rem 0 -1.25rem;
+  text-align: center;
+  font-size: 0.66rem;
+  opacity: 0.45;
+}
+
 .panel-button-secondary {
   position: relative;
   margin-top: 0;
@@ -1018,30 +1039,11 @@ canvas {
   color: var(--accent);
 }
 
-/* Shop and missions are taller than the viewport on small phones. */
-.panel-scroll {
-  align-items: flex-start;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  /* Re-enables vertical panning, which `body { touch-action: none }` disables
-     for every descendant. Without this the panel has a scrollbar it will not
-     actually scroll with a finger, and the Back button at the bottom of a long
-     screen is unreachable on a small phone. */
-  touch-action: pan-y;
-}
-
-.panel-card-wide {
-  width: min(30rem, 100%);
-  text-align: left;
-}
-
-.panel-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-}
+/* `.panel-scroll`, `.panel-card-wide` and `.panel-header` used to live here.
+   They were the scrolling-card treatment for the four menu screens, and those
+   are full-screen pages now - see `.page` below. Removed rather than left in
+   place: unused CSS with a plausible name is the kind of thing a later screen
+   gets built on before anyone notices nothing else uses it. */
 
 .panel-wallet {
   font-size: 0.9rem;
@@ -1534,21 +1536,20 @@ canvas {
  *
  * A segmented control rather than a row of links: the three sections are one
  * choice with one answer, and the shape says so before the labels are read.
- * Sticky, so switching section does not mean scrolling back up past a list to
- * find the control that got you there.
+ * In the page toolbar rather than the scroll, so switching section never means
+ * scrolling back up past a list to find the control that got you there.
  */
 .shop-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   gap: 0.25rem;
-  margin: 0.9rem 0 0.2rem;
   padding: 0.25rem;
   border-radius: 999px;
   background: rgba(20, 45, 62, 0.08);
-  /* The card behind is translucent; without this the list scrolls through. */
-  backdrop-filter: blur(8px);
+  /* No longer sticky, and no longer blurred. Both were paying for a scrolling
+     card: the tabs had to pin themselves to the top of the scroll and hide the
+     list passing behind them. They now sit in the page toolbar, which does not
+     scroll at all - so the browser is not asked to blur a strip of the screen
+     every frame for an effect that has nothing left to hide. */
 }
 
 .shop-tab {
@@ -1593,28 +1594,14 @@ canvas {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
-.shop-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-/* What the player is currently wearing, under the title - so the previews below
-   have something to be compared against. */
+/* What the player is currently wearing, in the page toolbar - so the previews
+   below have something to be compared against. `.shop-header` and
+   `.shop-header-right` were here too; the page shell owns that row now. */
 .shop-wearing {
-  margin-top: 0.15rem;
+  margin: 0 0 0.45rem;
   font-size: 0.8rem;
   font-weight: 600;
   opacity: 0.6;
-}
-
-/* Wallet and close, in that order: the money is what the eye wants and the exit
-   is where the thumb expects it, at the very corner. */
-.shop-header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 /*
@@ -1624,6 +1611,76 @@ canvas {
  * where every other app on the phone puts it - a shop is not the place to teach
  * someone a new way to leave a page.
  */
+/*
+ * Full-screen pages.
+ *
+ * The sibling of `.panel`, and what the menus became. A panel is a card
+ * floating in a dimmed screen with its contents scrolling *inside* it, which is
+ * the shape of a dialog - fine for a pause menu, wrong for a shop with fourteen
+ * items in it. A page fills the screen, so what is on it can grow.
+ *
+ * Three rows in a column, and only the middle one scrolls. That is the whole
+ * trick: the title, the coin balance and the way out stay where the player last
+ * saw them however far down the list they are.
+ */
+.page {
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  /* Nearly opaque, and not blurred. A page is somewhere you *are*, not
+     something in front of where you were - and a full-screen backdrop-filter
+     over a live 3D scene is a per-frame blur of the whole canvas, which is real
+     money on a phone for an effect nobody looks at. */
+  background: rgba(247, 251, 255, 0.97);
+  color: var(--ink);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  /* The status bar overlays the WebView, so the safe inset is part of the
+     header's padding rather than something the whole layer is inset by - which
+     would leave a stripe of canvas above a page that is meant to fill it. */
+  padding: calc(var(--safe-top) + 0.9rem) calc(var(--safe-right) + 1.1rem) 0.7rem
+    calc(var(--safe-left) + 1.1rem);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Wallet then close, in that order: the money is what the eye wants and the
+   exit is where the thumb expects it, at the very corner. */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-toolbar {
+  padding: 0 calc(var(--safe-right) + 1.1rem) 0.5rem calc(var(--safe-left) + 1.1rem);
+}
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Momentum scrolling, and a scroll that stops at the ends rather than pulling
+     the whole WebView down with it. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.25rem calc(var(--safe-right) + 1.1rem) calc(var(--safe-bottom) + 1.5rem)
+    calc(var(--safe-left) + 1.1rem);
+  /* Vertical dragging has to be the browser's here, unlike everywhere else in
+     the app, where `.layer` gives every touch to the swipe reader. */
+  touch-action: pan-y;
+}
+
 .panel-close {
   display: grid;
   width: 2.2rem;

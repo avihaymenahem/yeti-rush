@@ -1,29 +1,30 @@
 /**
- * App shell.
+ * App shell, and the router's root route.
  *
  * The Canvas mounts once and stays mounted for the whole session, including
  * behind every screen. Tearing down a WebGL context per screen is slow on
  * mobile and leaks on some Android WebViews, so screens are DOM layers over a
- * live scene rather than separate views.
+ * live scene rather than separate views - which is exactly why this component
+ * is the *root* route rather than something rendered inside one. The location
+ * changes underneath it and the scene never notices.
  *
- * Routing is deliberately flat: the run phase decides whether the player is
- * riding, and `screen` decides what they are looking at when they are not.
+ * Two things decide what the player sees, and they are not the same kind of
+ * thing. The run phase - riding, paused, dead, being offered a revive - comes
+ * from the simulation store, because a run is not somewhere you can link to.
+ * The screen comes from the URL, through `<Outlet />`. See `app/router.tsx`.
  */
 
 import { Canvas } from '@react-three/fiber';
-import { useCallback, useEffect, useState } from 'react';
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { GameOver } from '@/app/GameOver';
 import { Home } from '@/app/Home';
 import { Hud } from '@/app/Hud';
 import { InputSurface } from '@/app/InputSurface';
-import { Missions } from '@/app/Missions';
 import { Paused } from '@/app/Paused';
 import { Revive } from '@/app/Revive';
-import { backTarget, type Screen } from '@/app/screens';
-import { Scores } from '@/app/Scores';
-import { Settings } from '@/app/Settings';
-import { Shop } from '@/app/Shop';
+import { backTarget, SCREEN_PATHS, screenForPath, type Screen } from '@/app/screens';
 import { ATMOSPHERE, CANVAS_BACKGROUND } from '@/game/config/visuals';
 import { TUNING } from '@/game/config/tuning';
 import { allowsDoubleJump } from '@/game/content/powerUps';
@@ -53,7 +54,15 @@ export function App() {
   const phase = useGameStore((state) => state.phase);
   const loadMeta = useMetaStore((state) => state.load);
   const settings = useMetaStore((state) => state.save.settings);
-  const [screen, setScreen] = useState<Screen>('home');
+
+  // The open screen, read from the location rather than held beside it. A
+  // `useState` copy would be a second source of truth for the same fact, and
+  // the back button reads it - so the two drifting apart is a back press that
+  // does the wrong thing.
+  const screen = useRouterState({
+    select: (state) => screenForPath(state.location.pathname),
+  });
+  const routerNavigate = useNavigate();
 
   // Reading the save is genuine external I/O, and it happens exactly once.
   useEffect(() => {
@@ -141,6 +150,12 @@ export function App() {
   // The Android hardware back button. A real external subscription, which is
   // what an effect is for - and it reads the live phase off the store rather
   // than closing over it, so the handler never needs re-attaching.
+  const navigate = useCallback(
+    (next: Screen) => void routerNavigate({ to: SCREEN_PATHS[next] }),
+    [routerNavigate],
+  );
+  const goHome = useCallback(() => navigate('home'), [navigate]);
+
   useEffect(
     () =>
       onBackButton(() => {
@@ -151,21 +166,18 @@ export function App() {
             break;
           case 'resume-menu':
             returnToMenu();
-            setScreen('home');
+            goHome();
             break;
           case 'close-screen':
-            setScreen('home');
+            goHome();
             break;
           case 'exit-app':
             void exitApp();
             break;
         }
       }),
-    [screen],
+    [screen, goHome],
   );
-
-  const goHome = useCallback(() => setScreen('home'), []);
-  const navigate = useCallback((next: Screen) => setScreen(next), []);
 
   const riding = phase === 'running';
   const paused = phase === 'paused';
@@ -234,10 +246,8 @@ export function App() {
       {atHome && <Home onNavigate={navigate} />}
       {finished && screen === 'home' && <GameOver onNavigate={navigate} onHome={goHome} />}
 
-      {screen === 'shop' && <Shop onClose={goHome} />}
-      {screen === 'missions' && <Missions onClose={goHome} />}
-      {screen === 'scores' && <Scores onClose={goHome} />}
-      {screen === 'settings' && <Settings onClose={goHome} />}
+      {/* Shop, Missions, Scores and Settings, whichever the URL names. */}
+      <Outlet />
     </>
   );
 }

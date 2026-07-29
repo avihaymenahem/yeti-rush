@@ -10,6 +10,7 @@
  * mute to fall out of step with the level.
  */
 
+import { Page } from '@/app/Page';
 import { TapButton } from '@/app/TapButton';
 import { useMetaStore } from '@/game/state/metaStore';
 import type { SaveData } from '@/game/state/saveSchema';
@@ -65,60 +66,67 @@ export function Settings({ onClose }: SettingsProps) {
   const haptics = settings.hapticsEnabled;
 
   return (
-    <div className="layer layer-safe panel panel-scroll">
-      <div className="panel-card panel-card-wide">
-        <header className="panel-header">
-          <h2 className="panel-title">Settings</h2>
-        </header>
+    <Page title="Settings" onClose={onClose}>
+      <ul className="toggle-list">
+        {VOLUMES.map((row) => (
+          <VolumeRow
+            key={row.key}
+            label={row.label}
+            hint={row.hint}
+            value={settings[row.key]}
+            onChange={(next) => setSetting(row.key, next)}
+          />
+        ))}
 
-        <ul className="toggle-list">
-          {VOLUMES.map((row) => (
-            <VolumeRow
-              key={row.key}
-              label={row.label}
-              hint={row.hint}
-              value={settings[row.key]}
-              onChange={(next) => setSetting(row.key, next)}
-            />
-          ))}
+        <li className="toggle-row">
+          <span className="toggle-text">
+            <span className="toggle-label">Vibration</span>
+            <span className="toggle-hint">Lane changes and impacts</span>
+          </span>
+          <TapButton
+            role="switch"
+            aria-checked={haptics}
+            aria-label="Vibration"
+            className={haptics ? 'switch switch-on' : 'switch'}
+            onTap={() => setSetting('hapticsEnabled', !haptics)}
+          >
+            <span className="switch-knob" />
+          </TapButton>
+        </li>
+      </ul>
 
-          <li className="toggle-row">
-            <span className="toggle-text">
-              <span className="toggle-label">Vibration</span>
-              <span className="toggle-hint">Lane changes and impacts</span>
-            </span>
-            <TapButton
-              role="switch"
-              aria-checked={haptics}
-              aria-label="Vibration"
-              className={haptics ? 'switch switch-on' : 'switch'}
-              onTap={() => setSetting('hapticsEnabled', !haptics)}
-            >
-              <span className="switch-knob" />
-            </TapButton>
-          </li>
-        </ul>
+      <h3 className="panel-section">Controls</h3>
+      <ul className="help-list">
+        <li>
+          <b>Swipe left / right</b> change lane
+        </li>
+        <li>
+          <b>Swipe up</b> or tap to jump
+        </li>
+        <li>
+          <b>Swipe down</b> to slide, or to dive back down in the air
+        </li>
+        <li>Swipes register as you move, so you can duck and steer in one go</li>
+        <li>Hit a ramp to fly over a chalet and its coin line</li>
+      </ul>
 
-        <h3 className="panel-section">Controls</h3>
-        <ul className="help-list">
-          <li>
-            <b>Swipe left / right</b> change lane
-          </li>
-          <li>
-            <b>Swipe up</b> or tap to jump
-          </li>
-          <li>
-            <b>Swipe down</b> to slide, or to dive back down in the air
-          </li>
-          <li>Swipes register as you move, so you can duck and steer in one go</li>
-          <li>Hit a ramp to fly over a chalet and its coin line</li>
-        </ul>
+      {/*
+        Credits, as one line at the foot of the page rather than a section.
 
-        <TapButton className="panel-button" onTap={onClose}>
-          Back
-        </TapButton>
-      </div>
-    </div>
+        LICENSES.md has said since the art was imported that the game "should
+        carry [a credit] in a credits screen before release" - CC0 requires no
+        attribution and no store checks for it, but Kenney asks as a courtesy
+        and a promise the project made to itself is still a promise. The first
+        attempt was a proper Credits heading with three bullets, which pushed
+        the old card into scrolling; that card is now a page and could take it,
+        but a colophon still reads better as a colophon.
+
+        The version is here for the same reason: once the game is on a store,
+        "it crashes on the ramp" is only actionable with a build number, and the
+        player cannot read one that is not on screen.
+      */}
+      <p className="panel-colophon">Scenery by Kenney (CC0) · Yeti Rush v{__APP_VERSION__}</p>
+    </Page>
   );
 }
 

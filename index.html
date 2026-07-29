@@ -10,6 +10,14 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Yeti Rush</title>
+    <!--
+      Written by `npm run icon` from the same crop as the launcher icon, so the
+      browser tab and the Android home screen show the same thing. The leading
+      slash is what makes this survive GitHub Pages: Vite rewrites root-relative
+      URLs in this file to the configured base, which a bare `icon.png` skips.
+    -->
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
 
     <!--
       Boot styles, inline and duplicated from index.css on purpose.

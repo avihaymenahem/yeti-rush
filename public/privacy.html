@@ -1,0 +1,165 @@
+<!doctype html>
+<!--
+  The privacy policy.
+
+  Google Play requires a live policy URL for every app in the App content
+  section, with no exemption for apps that collect nothing. It lives in
+  `public/` so the existing Pages workflow publishes it alongside the demo -
+  https://avihaymenahem.github.io/yeti-rush/privacy.html - which means it cannot
+  rot separately from the game or vanish when some other host lapses.
+
+  It is deliberately specific rather than boilerplate. A generic policy claiming
+  to collect "usage data we may share with partners" would be a false statement
+  about this app, and the Data safety form in the console is signed against it.
+
+  Standalone HTML with inline styles: the Vite bundle is the game, and a policy
+  that only renders once a WebGL app has booted is not a policy anyone can read.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#051844" />
+    <title>Yeti Rush — Privacy Policy</title>
+    <link rel="icon" type="image/png" href="icon.png" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        padding: 2.5rem 1.25rem 4rem;
+        background: #051844;
+        color: #dce8f6;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.65;
+      }
+      main {
+        max-width: 44rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.9rem;
+        margin: 0 0 0.25rem;
+        color: #fff;
+      }
+      h2 {
+        font-size: 1.15rem;
+        margin: 2.25rem 0 0.5rem;
+        color: #9fd0ff;
+      }
+      .stamp {
+        color: #8fa6c4;
+        font-size: 0.9rem;
+        margin: 0 0 2rem;
+      }
+      .lead {
+        font-size: 1.1rem;
+        border-left: 3px solid #f6a532;
+        padding-left: 1rem;
+        margin: 0 0 1rem;
+      }
+      ul {
+        padding-left: 1.2rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      a {
+        color: #9fd0ff;
+      }
+      code {
+        background: #0d2a63;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      footer {
+        margin-top: 3rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid #14356f;
+        color: #8fa6c4;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Yeti Rush — Privacy Policy</h1>
+      <p class="stamp">Effective 29 July 2026</p>
+
+      <p class="lead">
+        Yeti Rush collects nothing, sends nothing and contains no advertising, no analytics and no
+        third-party tracking of any kind. It has no user accounts and never asks who you are.
+      </p>
+
+      <h2>What the game stores</h2>
+      <p>
+        Your progress is saved on your own device and nowhere else. That is your coins, high score
+        and best distance, which boards and riders you own and have equipped, your power-up upgrade
+        levels, daily mission progress and the date of your last daily reward, and your sound,
+        music and vibration settings.
+      </p>
+      <p>
+        It is written to the app's private storage using Android's standard preferences. Other apps
+        cannot read it, we cannot read it, and uninstalling the game deletes it.
+      </p>
+
+      <h2>What leaves your device</h2>
+      <p>
+        Nothing. The game makes no network requests while you play — there is no server, no
+        leaderboard and no cloud save. All artwork, sound and code are contained in the app itself,
+        so it works identically in aeroplane mode.
+      </p>
+
+      <h2>Android's own backup</h2>
+      <p>
+        The app allows Android's system backup, so if you have Google backup switched on for your
+        device, your saved progress may be included in it and restored when you set up a new phone.
+        That backup is between you and Google under
+        <a href="https://policies.google.com/privacy">Google's privacy policy</a> — the game has no
+        access to it. You can turn it off in your device's backup settings.
+      </p>
+
+      <h2>Permissions</h2>
+      <ul>
+        <li>
+          <code>VIBRATE</code> — the short buzz on a lane change, a pickup or a crash. Turn it off
+          under Settings → Vibration.
+        </li>
+        <li>
+          <code>INTERNET</code> — required by the Android system component the game is drawn in, so
+          that it can load the game's own files from inside the app. It is not used to contact
+          anything on the internet.
+        </li>
+      </ul>
+      <p>
+        The game does not request access to your location, camera, microphone, contacts, photos,
+        files, or your advertising identifier.
+      </p>
+
+      <h2>Children</h2>
+      <p>
+        Yeti Rush is suitable for all ages. Because it collects no personal information from anyone,
+        it collects none from children either, and it shows no advertising.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy ever changes, the new version is published at this address with a new
+        effective date. A change that started collecting anything would also require an updated Data
+        safety declaration on Google Play before the release could ship.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about this policy:
+        <a href="mailto:avihay@three-dev.com">avihay@three-dev.com</a>.
+      </p>
+
+      <footer>
+        <a href="./">← Back to Yeti Rush</a>
+      </footer>
+    </main>
+  </body>
+</html>

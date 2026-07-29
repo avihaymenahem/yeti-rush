@@ -49,6 +49,21 @@ export interface ObstacleEntity {
    * it takes to cross. Without this it would score once per frame.
    */
   phased: boolean;
+  /**
+   * A roll in [0, 1) fixed when the obstacle is spawned, for kinds drawn with
+   * more than one model.
+   *
+   * The simulation never reads it - it decides nothing about collision, scoring
+   * or solvability, and two boulders of different shapes play identically. It
+   * lives here rather than in the renderer because a pooled entity is recycled
+   * constantly, and a look chosen at draw time would flicker between models as
+   * the same slot was reused.
+   *
+   * Kept as a roll rather than a resolved index so the spawner never has to know
+   * how many models exist: adding a fifth boulder is a change in `models.ts`
+   * alone.
+   */
+  style: number;
 }
 
 export interface CoinEntity {
@@ -155,6 +170,7 @@ export function createSpawner(): SpawnerState {
     trackZ: 0,
     passed: false,
     phased: false,
+    style: 0,
   }));
 
   const coins: CoinEntity[] = Array.from({ length: MAX_COINS }, () => ({
@@ -346,6 +362,9 @@ function layChunk(
     entity.trackZ = spec.z;
     entity.passed = false;
     entity.phased = false;
+    // Rolled for every obstacle, not only the kinds that have variants, so the
+    // stream does not shift the day a second drift model is added.
+    entity.style = rng.next();
   }
 
   // Rolled per run, so coins are scattered rather than bolted to every feature.

@@ -113,11 +113,25 @@ describe('over a played run', () => {
     expect(perKm).toBeLessThan(20);
   });
 
-  it('stays a minority of what the player got past', () => {
-    // Squeezing past has to be the exception. If most obstacles scored as near
-    // misses the bonus would just be a second, noisier distance score.
+  it('stays a small minority of what the player got past', () => {
+    /*
+     * Squeezing past has to be the exception. If most obstacles scored as near
+     * misses the bonus would just be a second, noisier distance score.
+     *
+     * Stated as a share, and the denominator is every obstacle passed over the
+     * whole run. It used to be the count still sitting in the pool at the final
+     * tick - at most a screenful - compared against `nearMisses`, which is a
+     * lifetime total. Being a lifetime figure over a snapshot, the comparison
+     * moved with the length of the run rather than with the mechanic, and it
+     * sat one obstacle away from failing for no reason anybody would have
+     * recognised as a reason.
+     *
+     * Measured over these 24 seeds the real share is 0.098, with the worst
+     * single seed at 0.22. A third is therefore comfortably clear of normal
+     * variation while still failing long before "fires on everything".
+     */
     const passed = results.reduce((sum, r) => sum + r.passed, 0);
-    expect(passed).toBeGreaterThan(50);
-    expect(nearMisses).toBeLessThan(passed);
+    expect(passed).toBeGreaterThan(500);
+    expect(nearMisses / passed).toBeLessThan(0.35);
   });
 });

@@ -16,8 +16,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { TUNING } from '@/game/config/tuning';
-import { OBSTACLE_MODELS, PINE_MODELS } from '@/game/content/models';
+import { LANES, TUNING } from '@/game/config/tuning';
+// The angle and tint resolvers are exercised in `obstacleVariants.test.ts`;
+// what belongs here is the pair that interacts with the collider.
+import { MAX_STYLE_SCALE, OBSTACLE_MODELS, PINE_MODELS, styleScale } from '@/game/content/models';
 import { OBSTACLE_KINDS, obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import {
   coinGeometry,
@@ -98,6 +100,18 @@ function modelSize(url: string): { x: number; y: number; z: number } {
   return { x: max[0]! - min[0]!, y: max[1]! - min[1]!, z: max[2]! - min[2]! };
 }
 
+/**
+ * How many primitives a model is built from.
+ *
+ * `useModel` sets `flatShading` from whether a model had more than one mesh, so
+ * this is not trivia: two variants of one obstacle that disagree here are
+ * shaded differently - one faceted, one smooth - standing side by side.
+ */
+function primitiveCount(url: string): number {
+  const gltf = readGlbJson(readFileSync(modelPath(url)));
+  return gltf.meshes.reduce((total, mesh) => total + mesh.primitives.length, 0);
+}
+
 /** The size a model will be once `useModel` has applied the spec's fit. */
 function fittedSize(spec: ModelSpec): { x: number; y: number; z: number } {
   const raw = modelSize(spec.url);
@@ -115,6 +129,9 @@ function fittedSize(spec: ModelSpec): { x: number; y: number; z: number } {
 
 const modelledKinds = Object.keys(OBSTACLE_MODELS) as ObstacleKind[];
 
+/** Every registered spec, flattened out of the per-kind variant lists. */
+const allSpecs = Object.values(OBSTACLE_MODELS).flat();
+
 describe('obstacle models', () => {
   it('covers at least the obstacles the player meets most', () => {
     // Three of the seven kinds are imported art. The rest are built in code,
@@ -125,46 +142,159 @@ describe('obstacle models', () => {
   });
 
   it('every registered model file exists and parses', () => {
-    for (const spec of Object.values(OBSTACLE_MODELS)) {
+    for (const spec of allSpecs) {
       expect(() => modelSize(spec.url)).not.toThrow();
     }
   });
 
   it('declares a fit for every model, so nothing renders at authoring scale', () => {
-    for (const spec of Object.values(OBSTACLE_MODELS)) {
+    for (const spec of allSpecs) {
       expect(Boolean(spec.fitBox ?? spec.fitWidth ?? spec.fitHeight)).toBe(true);
     }
   });
 
-  describe.each(modelledKinds)('%s', (kind) => {
-    const spec = OBSTACLE_MODELS[kind]!;
-    const def = obstacleDef(kind);
-    const collider = {
-      x: def.halfWidth * 2,
-      y: def.halfHeight * 2,
-      z: def.halfDepth * 2,
-    };
+  it('never registers the same file twice for one kind', () => {
+    // A duplicated URL is a variant that silently is not one: the renderer would
+    // build two identical layers and one of the intended looks would be missing.
+    for (const kind of modelledKinds) {
+      const urls = OBSTACLE_MODELS[kind]!.map((spec) => spec.url);
+      expect(new Set(urls).size).toBe(urls.length);
+    }
+  });
 
-    it('is never visibly narrower or shorter than its collider', () => {
-      const size = fittedSize(spec);
-      // A visual smaller than the hitbox means dying to apparently thin air.
-      expect(size.x).toBeGreaterThanOrEqual(collider.x * 0.95);
-      expect(size.y).toBeGreaterThanOrEqual(collider.y * 0.95);
-      expect(size.z).toBeGreaterThanOrEqual(collider.z * 0.95);
+  /*
+   * Every variant is held to the collider, not just the first.
+   *
+   * This is the guard that decided which of the Nature Kit's ten `rock_tall`
+   * models could be used at all: fitted to a 3 m height, six of them come out
+   * 2.3-3.1 m wide against a 1.7 m collider and fail the width bound below.
+   */
+  describe.each(modelledKinds.flatMap((kind) => OBSTACLE_MODELS[kind]!.map((spec) => [kind, spec] as const)))(
+    '%s - %o',
+    (kind, spec) => {
+      const def = obstacleDef(kind);
+      const collider = {
+        x: def.halfWidth * 2,
+        y: def.halfHeight * 2,
+        z: def.halfDepth * 2,
+      };
+
+      it('is never visibly narrower or shorter than its collider', () => {
+        const size = fittedSize(spec);
+        // A visual smaller than the hitbox means dying to apparently thin air.
+        expect(size.x).toBeGreaterThanOrEqual(collider.x * 0.95);
+        expect(size.y).toBeGreaterThanOrEqual(collider.y * 0.95);
+        expect(size.z).toBeGreaterThanOrEqual(collider.z * 0.95);
+      });
+
+      it('does not sprawl far past its collider', () => {
+        const size = fittedSize(spec);
+        // Generous on depth - a deep visual is forgiving, since the hitbox is
+        // shorter along the direction of travel - but width must stay in lane.
+        expect(size.x).toBeLessThanOrEqual(collider.x * 1.15);
+        expect(size.y).toBeLessThanOrEqual(collider.y * 1.15);
+        expect(size.z).toBeLessThanOrEqual(collider.z * 1.8);
+      });
+
+      it('stays inside its lane, so it cannot look like it blocks a neighbour', () => {
+        // Lanes are 2.2 apart; anything wider than that reaches into the next one.
+        expect(fittedSize(spec).x).toBeLessThan(2.2);
+      });
+    },
+  );
+
+  /*
+   * The boulder's variants.
+   *
+   * The counterweight to the sweep above: "every variant fits its collider" is
+   * trivially satisfied by registering the same rock four times, and "the
+   * boulder has variants" is trivially satisfied by four models that look
+   * identical. So this asserts there really are several, that they are
+   * different files, and that they differ in shape rather than only in name -
+   * while still all standing exactly 3 m tall, since the height is the whole
+   * reason the boulder cannot be jumped.
+   */
+  describe('boulder variants', () => {
+    const specs = OBSTACLE_MODELS.boulder!;
+
+    it('offers more than one rock, so a run is not the same spire repeated', () => {
+      expect(specs.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('does not sprawl far past its collider', () => {
-      const size = fittedSize(spec);
-      // Generous on depth - a deep visual is forgiving, since the hitbox is
-      // shorter along the direction of travel - but width must stay in lane.
-      expect(size.x).toBeLessThanOrEqual(collider.x * 1.15);
-      expect(size.y).toBeLessThanOrEqual(collider.y * 1.15);
-      expect(size.z).toBeLessThanOrEqual(collider.z * 1.8);
+    it('gives every variant the same un-jumpable height', () => {
+      // The one property that is gameplay, not decoration. A shorter variant
+      // would be a boulder the player could clear, which the solvability check
+      // has no idea about - it only knows the kind says "dodge".
+      for (const spec of specs) {
+        expect(fittedSize(spec).y).toBeCloseTo(obstacleDef('boulder').halfHeight * 2, 5);
+      }
     });
 
-    it('stays inside its lane, so it cannot look like it blocks a neighbour', () => {
-      // Lanes are 2.2 apart; anything wider than that reaches into the next one.
-      expect(fittedSize(spec).x).toBeLessThan(2.2);
+    it('finishes every variant identically, so they gloss alike', () => {
+      /*
+       * `useModel` builds the material out of the spec: `textured` chooses the
+       * atlas branch over the vertex-colour one, and `recolor` sets the tint.
+       * A variant differing in either would be the same rock in a different
+       * finish - a dull one among three shiny ones, or a sandy one among three
+       * slate - and nothing else in this file would notice, because every size
+       * check would still pass.
+       */
+      const finishes = specs.map(({ url: _url, ...rest }) => JSON.stringify(rest));
+      expect(new Set(finishes).size).toBe(1);
+    });
+
+    it('shades every variant the same way', () => {
+      // The other half of the finish, and the half that lives in the file
+      // rather than the spec: `flatShading` is set from the model's own mesh
+      // count, so a single-primitive rock would come out smooth beside three
+      // faceted ones however identical its spec.
+      const faceted = specs.map((spec) => primitiveCount(spec.url) > 1);
+      expect(new Set(faceted).size).toBe(1);
+    });
+
+    it('never reaches the next lane, however it is turned and sized', () => {
+      /*
+       * Boulders are drawn at a random angle and up to `MAX_STYLE_SCALE`, which
+       * is what stops four models reading as one rock at speed. The cost is
+       * that the footprint no longer sits inside the axis-aligned width every
+       * other test here measures: turned 45 degrees, a 1.7 x 1.8 m rock covers
+       * its *diagonal*, and scaled up it covers more still.
+       *
+       * So the bound is checked against the worst combination the renderer can
+       * actually produce, not the resting pose. The limit is the near edge of a
+       * rider one lane over: lanes are 2.2 apart and `halfWidth` is a half
+       * extent, so that edge sits at 2.2 - 0.38. Same line `procedural props`
+       * holds the chalet to.
+       */
+      const neighbourEdge = LANES[2]! - TUNING.player.halfWidth;
+      for (const spec of specs) {
+        const size = fittedSize(spec);
+        const worstReach = (Math.hypot(size.x, size.z) * MAX_STYLE_SCALE) / 2;
+        expect(worstReach).toBeLessThan(neighbourEdge);
+      }
+    });
+
+    it('only ever grows, so a rock can never be smaller than its hitbox', () => {
+      // The jitter's one hard rule. Scaling below 1 would put art inside the
+      // collider and kill the player in visibly clear air - the exact failure
+      // the whole fitted-size sweep above exists to prevent, reintroduced per
+      // instance where no static check would ever see it.
+      expect(MAX_STYLE_SCALE).toBeGreaterThanOrEqual(1);
+      for (let i = 0; i <= 1000; i++) {
+        const scale = styleScale(i / 1000);
+        expect(scale).toBeGreaterThanOrEqual(1);
+        expect(scale).toBeLessThanOrEqual(MAX_STYLE_SCALE);
+      }
+    });
+
+    it('actually differ in silhouette', () => {
+      // Footprint, since the height is pinned. Rounded to a centimetre so this
+      // measures shapes a player could tell apart, not float noise.
+      const footprints = specs.map((spec) => {
+        const size = fittedSize(spec);
+        return `${size.x.toFixed(2)}x${size.z.toFixed(2)}`;
+      });
+      expect(new Set(footprints).size).toBe(specs.length);
     });
   });
 });
@@ -198,7 +328,7 @@ describe('procedural props', () => {
   });
 
   it('covers every obstacle kind without a model', () => {
-    const modelled = new Set(Object.keys(OBSTACLE_MODELS));
+    const modelled = new Set(modelledKinds);
     for (const kind of OBSTACLE_KINDS) {
       if (modelled.has(kind)) continue;
       expect(propKinds).toContain(kind);

@@ -53,7 +53,12 @@ export interface DebugBridge {
    * reproducing a specific situation without waiting for it to come up.
    */
   stage: (layout: {
-    obstacles?: { kind: ObstacleKind; lane: LaneIndex; ahead: number }[];
+    /**
+     * `style` pins the art variant for kinds that have several, as a roll in
+     * [0, 1) - see `variantIndex`. Left out, it is random: staging is an
+     * inspection tool, so this is the one place `Math.random` is allowed.
+     */
+    obstacles?: { kind: ObstacleKind; lane: LaneIndex; ahead: number; style?: number }[];
     ramps?: { lane: LaneIndex; ahead: number }[];
     coins?: { lane: LaneIndex; ahead: number; y?: number }[];
   }) => void;
@@ -153,6 +158,12 @@ export function installDebugBridge(): void {
         entity.lane = spec.lane;
         entity.trackZ = runtime.distance + spec.ahead;
         entity.passed = false;
+        // Every field the spawner sets has to be set here too, or a staged
+        // obstacle inherits whatever the recycled slot last held: a stale
+        // `phased` makes it score as already ridden through, and a stale
+        // `style` draws it as the previous tenant's art variant.
+        entity.phased = false;
+        entity.style = spec.style ?? Math.random();
       });
 
       layout.ramps?.forEach((spec, index) => {

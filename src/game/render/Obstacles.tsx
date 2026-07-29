@@ -1,10 +1,11 @@
 /**
  * Obstacle rendering.
  *
- * One instanced mesh per obstacle kind, so the whole track costs a fixed
- * handful of draw calls no matter how dense it gets. Each frame the active
- * pool is scanned and `count` is set to however many instances were written -
- * unused instances are simply not drawn rather than hidden off screen.
+ * One instanced mesh per obstacle kind - or per art variant, for a kind drawn
+ * with several models - so the whole track costs a fixed handful of draw calls
+ * no matter how dense it gets. Each frame the active pool is scanned and
+ * `count` is set to however many instances were written; unused instances are
+ * simply not drawn rather than hidden off screen.
  *
  * Kinds with a CC0 model use its geometry; the rest fall back to a box. Both
  * paths share the same placement loop, and in both the collider in
@@ -14,7 +15,14 @@
 import { useFrame } from '@react-three/fiber';
 import { Suspense, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { OBSTACLE_MODELS } from '@/game/content/models';
+import {
+  OBSTACLE_JITTER,
+  OBSTACLE_MODELS,
+  styleAngle,
+  styleScale,
+  styleTint,
+  variantIndex,
+} from '@/game/content/models';
 import { OBSTACLE_KINDS, obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
 import { vertexColorMaterial } from '@/game/render/mergeParts';
 import { isPropKind, propGeometry, type PropKind } from '@/game/render/propGeometry';
@@ -26,6 +34,7 @@ import { MAX_OBSTACLES, worldZOf } from '@/game/systems/spawner';
 import { GLOSS, saturate } from '@/game/config/visuals';
 
 const scratch = new THREE.Object3D();
+const scratchColour = new THREE.Color();
 
 /**
  * Writes the visible obstacles of one kind into an instanced mesh.
@@ -33,12 +42,19 @@ const scratch = new THREE.Object3D();
  * @param centreY - height to place instances at. Zero for prepared models,
  *        which are ground-aligned; the collider centre for primitive boxes,
  *        which are centred on their origin.
+ * @param variant - which art variant this mesh draws, and how many there are.
+ *        Omitted by the single-model layers, which take every obstacle of the
+ *        kind. Filtering here rather than sorting the pool keeps the hot path a
+ *        single linear scan, exactly as it was.
  */
 function useObstacleInstances(
   meshRef: React.RefObject<THREE.InstancedMesh | null>,
   kind: ObstacleKind,
   centreY: number,
+  variant?: { index: number; count: number },
 ): void {
+  const jitter = OBSTACLE_JITTER[kind] ?? false;
+
   useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -46,16 +62,23 @@ function useObstacleInstances(
     let written = 0;
     for (const obstacle of runtime.track.obstacles) {
       if (!obstacle.active || obstacle.kind !== kind) continue;
+      if (variant && variantIndex(obstacle.style, variant.count) !== variant.index) continue;
 
       const worldZ = worldZOf(obstacle.trackZ, runtime.distance);
       // Entities exist further out than they are drawn; skip the invisible ones.
       if (worldZ > RECYCLE_Z || worldZ < SPAWN_Z) continue;
 
       scratch.position.set(laneToX(obstacle.lane), centreY, worldZ);
-      scratch.rotation.set(0, 0, 0);
-      scratch.scale.set(1, 1, 1);
+      // Turned, resized and tinted per instance for the kinds that can take it.
+      // Swapping the model alone was not enough: four rocks all standing square
+      // on at one size still read as the same rock going past.
+      scratch.rotation.set(0, jitter ? styleAngle(obstacle.style) : 0, 0);
+      scratch.scale.setScalar(jitter ? styleScale(obstacle.style) : 1);
       scratch.updateMatrix();
       mesh.setMatrixAt(written, scratch.matrix);
+      if (jitter) {
+        mesh.setColorAt(written, scratchColour.setScalar(styleTint(obstacle.style)));
+      }
 
       written++;
       if (written >= MAX_OBSTACLES) break;
@@ -63,16 +86,29 @@ function useObstacleInstances(
 
     mesh.count = written;
     mesh.instanceMatrix.needsUpdate = true;
+    // Allocated lazily by the first `setColorAt`, so this is only ever touched
+    // on the kinds that actually tint.
+    if (jitter && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   });
 }
 
 /** Model-backed obstacles. Suspends while the GLB loads. */
-function ModelObstacleLayer({ kind, spec }: { kind: ObstacleKind; spec: ModelSpec }) {
+function ModelObstacleLayer({
+  kind,
+  spec,
+  variant,
+}: {
+  kind: ObstacleKind;
+  spec: ModelSpec;
+  // Explicitly `| undefined` for `exactOptionalPropertyTypes`: the single-model
+  // layers pass the prop and leave it unset, rather than omitting it.
+  variant?: { index: number; count: number } | undefined;
+}) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const { geometry, material } = useModel(spec);
 
   // Prepared models are ground-aligned, and so is every obstacle collider.
-  useObstacleInstances(meshRef, kind, 0);
+  useObstacleInstances(meshRef, kind, 0, variant);
 
   return (
     <instancedMesh castShadow receiveShadow
@@ -128,14 +164,20 @@ export function Obstacles() {
   return (
     <>
       {OBSTACLE_KINDS.map((kind) => {
-        const spec = OBSTACLE_MODELS[kind];
-        if (spec) {
-          // Per layer, so one slow model does not blank the others.
-          return (
-            <Suspense key={kind} fallback={null}>
-              <ModelObstacleLayer kind={kind} spec={spec} />
+        const specs = OBSTACLE_MODELS[kind];
+        if (specs) {
+          // A layer per variant. `variant` is left undefined when there is only
+          // one, so the common case does no per-instance work at all.
+          return specs.map((spec, index) => (
+            // Suspense per layer, so one slow model does not blank the others.
+            <Suspense key={spec.url} fallback={null}>
+              <ModelObstacleLayer
+                kind={kind}
+                spec={spec}
+                variant={specs.length > 1 ? { index, count: specs.length } : undefined}
+              />
             </Suspense>
-          );
+          ));
         }
         if (isPropKind(kind)) return <PropObstacleLayer key={kind} kind={kind} />;
         return <BoxObstacleLayer key={kind} kind={kind} />;

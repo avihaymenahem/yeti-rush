@@ -118,6 +118,10 @@ code, and run the suite before finishing.
 - Match existing naming and idiom. British spelling in prose and comments.
 - Derived state over `useEffect` in React (see the user's global preferences).
 - Colliders are authoritative; art is fitted to the hitbox, never the reverse.
+  Boulders are drawn turned, resized and tinted per instance, which is the one
+  place art moves independently of its collider — so that scale may **only ever
+  grow**. Shrinking art below the hitbox kills the player in visibly clear air,
+  and being per-instance it would never show up in a static check.
 
 ## Android
 

@@ -35,10 +35,20 @@ Models used:
 | File | Used for |
 | --- | --- |
 | `log_large.glb` | `log` obstacle (jump over) |
-| `rock_tallD.glb` | `boulder` obstacle (dodge) |
+| `rock_tallC.glb` | `boulder` obstacle (dodge) - variant |
+| `rock_tallD.glb` | `boulder` obstacle (dodge) - variant |
+| `rock_tallG.glb` | `boulder` obstacle (dodge) - variant |
+| `rock_tallI.glb` | `boulder` obstacle (dodge) - variant |
 
 Also extracted and available but not yet wired in: `fence_simple`, `log`,
 `rock_largeA`, `stump_old`, `tree_pineSmallA`, `tree_pineTallA`.
+
+The pack holds ten `rock_tall` models and only these four are usable as
+boulders. The collider is 1.7 m wide and every variant is fitted to a 3 m
+height, at which the other six come out 2.3-3.1 m wide: wide enough to reach
+into the neighbouring lane, or to sit around a hitbox the player cannot see.
+`A`, `B`, `E`, `F`, `H` and `J` are all multi-peak clusters or squat blocks and
+would need a collider of their own to be used at all.
 
 `cliff_block_stone.glb` was used for an `iceWall` obstacle and has been removed.
 It is a 1:1:1 block, so fitting it to the 1.9 x 3.2 x 0.8 collider stretched it

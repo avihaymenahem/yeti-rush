@@ -138,6 +138,8 @@ export function runAutopilot(
    */
   const verdicts = new Map<string, boolean>();
   let jumpsSeen = 0;
+  /** Every distinct obstacle the pilot got past, across the whole run. */
+  const passedIds = new Set<string>();
   rt.running = true;
 
   // Guard on both: `tickRun` returns immediately once the run is over, so a
@@ -184,19 +186,30 @@ export function runAutopilot(
     }
 
     tickRun(rt, step);
-  }
 
-  let passed = 0;
-  for (const obstacle of rt.track.obstacles) if (obstacle.passed) passed++;
+    /*
+     * Accumulated here rather than counted off the pool at the end.
+     *
+     * Obstacles are recycled constantly, so the pool at the final tick holds at
+     * most a screenful - it used to be counted there and compared against
+     * `rt.nearMisses`, which is a running total for the whole run. That is a
+     * lifetime figure over a snapshot, and the two are not commensurable: the
+     * ratio drifted with nothing but the length of the run.
+     *
+     * The slot index disambiguates two obstacles laid at the same distance in
+     * different lanes; `trackZ` disambiguates successive tenants of one slot.
+     */
+    for (let i = 0; i < rt.track.obstacles.length; i++) {
+      const obstacle = rt.track.obstacles[i]!;
+      if (obstacle.active && obstacle.passed) passedIds.add(`${i}:${obstacle.trackZ.toFixed(2)}`);
+    }
+  }
 
   return {
     distance: rt.distance,
     survived: rt.alive,
     nearMisses: rt.nearMisses,
-    // Entities are pooled and recycled, so this counts what is still in the
-    // pool rather than everything ever laid. Fine as a denominator for a rate
-    // measured over the same window, and never used as an absolute.
-    passed,
+    passed: passedIds.size,
     stumbles: rt.stumbles,
     deathCause: rt.deathCause,
   };

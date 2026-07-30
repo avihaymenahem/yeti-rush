@@ -42,9 +42,21 @@ export interface SkinDef {
   /** Coins to unlock. Zero means owned from the start. */
   price: number;
   stats: BoardStats;
-  fur: string;
-  furShade: string;
-  face: string;
+  /**
+   * The deck, and the rails and binding straps on it.
+   *
+   * The board's *entire* palette, deliberately. There were `fur`, `furShade`
+   * and `face` fields here too, left behind when riders were split out into
+   * `characters.ts` - dead from the moment of that split, because `buildYeti`
+   * has read every colour above the deck off the character ever since.
+   *
+   * They are deleted rather than merely left unread. For as long as a board
+   * could name a fur colour, the bug the split was made to end - buying a
+   * snowboard changing the colour of the yeti riding it - stayed *representable*,
+   * one careless destructure away from returning, and a new board would be
+   * authored with three colours that do nothing. `tests/characters.test.ts`
+   * asserts a board carries no rider colour, so they cannot drift back either.
+   */
   board: string;
   boardTrim: string;
 }
@@ -58,9 +70,6 @@ export const SKINS = {
     tagline: 'No tricks. Balanced everywhere.',
     price: 0,
     stats: { speed: 1.0, control: 1.0, grip: 1.0, fortune: 1.0 },
-    fur: '#f7fbfe',
-    furShade: '#dbe9f3',
-    face: '#2b3d4a',
     board: '#e8663c',
     boardTrim: '#2fa8e0',
   },
@@ -70,9 +79,6 @@ export const SKINS = {
     tagline: 'Carves hard. Gives up a little pace for it.',
     price: 550,
     stats: { speed: 0.95, control: 1.22, grip: 1.05, fortune: 1.0 },
-    fur: '#cfeaf7',
-    furShade: '#a8d4ea',
-    face: '#1d3a4a',
     board: '#2fa8e0',
     boardTrim: '#f7fbfe',
   },
@@ -82,9 +88,6 @@ export const SKINS = {
     tagline: 'Quick off the mark. Less room for error.',
     price: 1600,
     stats: { speed: 1.1, control: 1.0, grip: 0.9, fortune: 1.08 },
-    fur: '#f6d7c4',
-    furShade: '#e0a583',
-    face: '#40251b',
     board: '#c0392b',
     boardTrim: '#f0b429',
   },
@@ -94,9 +97,6 @@ export const SKINS = {
     tagline: 'Shrugs off a slip. The patrol loses interest fast.',
     price: 3600,
     stats: { speed: 0.96, control: 1.1, grip: 1.55, fortune: 1.0 },
-    fur: '#4a5a6b',
-    furShade: '#33404e',
-    face: '#d7b3ff',
     board: '#22303a',
     boardTrim: '#d7b3ff',
   },
@@ -106,9 +106,6 @@ export const SKINS = {
     tagline: 'Coins are worth far more. Trip twice and you are done.',
     price: 7200,
     stats: { speed: 1.05, control: 1.05, grip: 0.85, fortune: 1.3 },
-    fur: '#d9f7e8',
-    furShade: '#8fe3c4',
-    face: '#1f4a3c',
     board: '#5be584',
     boardTrim: '#d7b3ff',
   },

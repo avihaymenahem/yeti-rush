@@ -217,12 +217,53 @@ export const TUNING = {
   camera: {
     /** Vertical field of view in degrees (three.js cameras use vertical fov). */
     fov: 58,
-    /** Eye height above the snow. */
-    height: 3.6,
+    /**
+     * Extra degrees of field of view at top speed.
+     *
+     * Lived in `Scene.tsx` as a private constant, which was the wrong home: it
+     * governs how far down the track can be *read* at speed, which is the same
+     * class of number as `ATMOSPHERE.fogDensity` - documented there as a
+     * gameplay quantity rather than a decorative one - and the framing tests
+     * have to sweep the lens across its whole range to prove the outer lanes
+     * stay on screen.
+     *
+     * Raised from 9. The kick is the cheapest speed cue there is and it costs
+     * nothing, but it is also the one that contributes *least* where it matters
+     * most: it is proportional to the speed ramp, so it is identically zero for
+     * the opening of every run.
+     */
+    speedFovKick: 12,
+    /**
+     * Eye height above the snow.
+     *
+     * Lowered from 3.6. Ground angular flow goes as `v / (2 * h * tan(halfFov))`,
+     * so eleven centimetres of eye height is worth more optic flow than any
+     * effect in the renderer, on frame one, for every player, for free - and
+     * unlike the fov kick it is not gated on a speed ramp the opening of a run
+     * never reaches.
+     *
+     * `lookAtHeight` has to move with it; see there.
+     *
+     * This is the one change in the visual pass that can affect play. Lower eye
+     * height compresses the vertical separation between successive obstacle
+     * rows in frame, so rows overlap sooner and are read later. If a device
+     * check finds rows illegible against `REACTION_SECONDS`, revert this and
+     * `lookAtHeight` together to 3.6 / 1.1 - nothing else depends on them.
+     */
+    height: 3.2,
     /** Never come closer than this, however wide the screen is. */
     minDistance: 7.5,
-    /** Height of the point the camera aims at. */
-    lookAtHeight: 1.1,
+    /**
+     * Height of the point the camera aims at.
+     *
+     * Dropped by exactly the same 0.4 as `height`, and that pairing is the
+     * whole point. Camera pitch is set by `(height - lookAtHeight)` over
+     * `(cameraZ - lookAheadZ)`; moving both by the same amount holds the pitch
+     * and the horizon line still, so the frame the player learnt does not tilt
+     * and the full optic-flow gain from the lower eye actually lands. Lowering
+     * `height` alone pitches the camera down and gives most of it straight back.
+     */
+    lookAtHeight: 0.7,
     /** How far down the track the camera aims. */
     lookAheadZ: -12,
     /**

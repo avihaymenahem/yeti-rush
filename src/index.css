@@ -83,28 +83,87 @@ canvas {
   inset: 0;
   z-index: 5;
   pointer-events: none;
-  /* Darkened corners focus the eye on the lane ahead. */
+  /*
+   * Darkened corners focus the eye on the lane ahead - and they are the
+   * cheapest dark values in the whole frame. Measured, 70% of this game's play
+   * space sits inside a single 10% luminance band and the bottom five deciles
+   * carry 9.4% between them: the image has no weight because it is almost
+   * entirely one value, not because it is too bright. The transparent core is
+   * pulled in from 40% and the outer stop taken deep, which costs a compositor
+   * gradient that is already being paid for.
+   */
   background:
     radial-gradient(
-      ellipse 78% 62% at 50% 42%,
-      rgba(0, 0, 0, 0) 40%,
-      rgba(12, 34, 58, 0.16) 78%,
-      rgba(10, 28, 50, 0.36) 100%
+      ellipse 76% 60% at 50% 42%,
+      rgba(0, 0, 0, 0) 25%,
+      rgba(10, 30, 54, 0.22) 62%,
+      rgba(7, 21, 40, 0.55) 100%
     );
 }
 
-/* A warm lift in the upper frame, matching the low sun in the sky dome. */
 .grade::after {
   content: '';
   position: absolute;
   inset: 0;
+  /*
+   * Warm in the upper frame, matching the low sun in the sky dome, and cool
+   * and deep below it. The camera pitches down about twelve degrees so the
+   * horizon sits around 30% down the frame - which means a gradient running
+   * past 44% is lying across the far *snow*, not the sky, and that is exactly
+   * where the missing dark end is.
+   *
+   * Plain alpha rather than `mix-blend-mode: soft-light`. The blend mode's only
+   * benefit is a hue-preserving lift, and at these alphas a straight overlay is
+   * indistinguishable from it - while being a permanently composited blend of
+   * the whole live canvas, every frame, on a GPU with nothing to spare. The
+   * previous version was faint enough that nobody could see it at all, which is
+   * the definition of paying for nothing.
+   */
   background: linear-gradient(
     to bottom,
-    rgba(255, 197, 122, 0.13) 0%,
-    rgba(255, 210, 150, 0.05) 30%,
-    rgba(120, 170, 210, 0) 60%
+    rgba(255, 190, 116, 0.16) 0%,
+    rgba(255, 205, 150, 0.06) 26%,
+    rgba(24, 52, 84, 0) 44%,
+    rgba(16, 40, 70, 0.2) 100%
   );
-  mix-blend-mode: soft-light;
+}
+
+/*
+ * Speed and impact tint.
+ *
+ * Two narrow gradients hugging the left and right edges. The opacity is driven
+ * imperatively from the frame loop through `platform/screenFlash`: the run's
+ * own speed holds a floor under it and every impulse punches above that floor.
+ *
+ * Dark, and narrow. White speed wedges are the reflex on a runner and they are
+ * precisely wrong here - a white overlay on a near-white snow palette is the
+ * least legible thing it is possible to draw, and it worsens the one defect the
+ * whole visual pass exists to fix. A narrow strong gradient reads as speed; a
+ * wide weak one reads as a dirty screen.
+ *
+ * Honest cost: a continuous alpha blend over about a fifth of the frame, with
+ * no offsetting saving anywhere - the only thing in the visual pass of which
+ * that is true. If it does not hold sixty on a device, narrow the strips before
+ * weakening them.
+ */
+.rush {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(to right, rgba(6, 20, 38, 0.85) 0%, rgba(6, 20, 38, 0) 11%),
+    linear-gradient(to left, rgba(6, 20, 38, 0.85) 0%, rgba(6, 20, 38, 0) 11%);
+  /* Its own compositor layer, so a fade never repaints the scene under it. */
+  will-change: opacity;
+}
+
+/* Outside a live run. See the note in `App.tsx`: the loop owns the opacity and
+   nothing React-side may write it, so the layer is taken out of the compositor
+   instead of being turned down. */
+.rush-off {
+  display: none;
 }
 
 /*
@@ -114,6 +173,12 @@ canvas {
  * not to the scoreboard, and below the boot poster. Opacity is written from the
  * frame loop; nothing here animates it, since a CSS transition would fight the
  * impulse decay for control of the same property.
+ *
+ * Note the z-order, which nobody had written down: this sits at 50 and `.panel`
+ * at 30, siblings with no stacking context between them, so on death the wash
+ * decays *over* the results card rather than behind it. That is kept on
+ * purpose - the wash is the wipe the result arrives through - and the card is
+ * held back for its tail. See `.panel-card-enter`.
  */
 .flash {
   position: absolute;
@@ -146,16 +211,20 @@ canvas {
   }
 }
 
+/*
+ * Worn by the coin counter only.
+ *
+ * The score used to wear it too, keyed on its own value. `updateScore` floors a
+ * continuously growing distance term at a point per unit, so the score advances
+ * by roughly two on every 100 ms publish and the store's equality guard can
+ * never short-circuit it: a 140 ms animation restarting every 100 ms, on the
+ * largest element on the screen, that has never once landed. A coin is a real
+ * event and the pop lands between them.
+ */
 .hud-pop {
   display: inline-block;
   transform-origin: center;
   animation: hud-pop 140ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hud-pop {
-    animation: none;
-  }
 }
 
 /* A character's palette as three bands - enough to tell riders apart in a list
@@ -206,6 +275,8 @@ canvas {
   animation: coach-in 220ms ease-out;
 }
 
+/* Reduced motion is handled once, at the end of this file. */
+
 .hud-coach-title {
   font-size: 1.5rem;
   font-weight: 900;
@@ -218,12 +289,6 @@ canvas {
   color: #ffd35c;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hud-coach {
-    animation: none;
-  }
 }
 
 /* --- Tricks ------------------------------------------------------------ */
@@ -266,46 +331,77 @@ canvas {
 /* --- Avalanche --------------------------------------------------------- */
 
 /*
- * Pulsing, because it is a state and not an event. A static banner is read once
- * and then stops being noticed, which is the opposite of what is wanted for the
- * one stretch where a mistake is fatal.
+ * A drain bar on the top edge, and one announcement when it starts.
+ *
+ * It used to be a pill pulsing its `background` - a paint property animated in
+ * a stylesheet where every other animation moves a transform or an opacity, and
+ * worse, animated *permanently*. Nobody had stated the number: at a 900 m
+ * interval and fifteen seconds a piece, an avalanche is live for roughly 40% of
+ * the early run and 65% of the late one, so the dominant visual state of the
+ * late game was a flashing red rectangle. A warning that is on most of the time
+ * is not a warning, and it drowns out everything that genuinely is an event.
+ *
+ * The top edge only. The sides belong to the speed and impact tint, and near
+ * misses cluster hardest *during* an avalanche - owning the sides here would
+ * hide them at exactly the moment they matter most.
  */
-@keyframes avalanche-pulse {
-  0%,
-  100% {
-    background: rgba(196, 62, 42, 0.86);
+.hud-avalanche {
+  position: absolute;
+  /* Absolute positioning resolves against the layer's *padding* box, so the
+     safe insets have to be re-applied by hand here - at `top: 0` the bar would
+     sit under the status bar, which on an edge-to-edge Android theme means it
+     would not be visible at all. */
+  top: var(--safe-top);
+  left: var(--safe-left);
+  right: var(--safe-right);
+  overflow: hidden;
+  height: 0.28rem;
+  background: rgba(74, 18, 12, 0.4);
+}
+
+.hud-avalanche-drain {
+  display: block;
+  height: 100%;
+  /* Deep to hot as it empties, so running out of road looks like running out. */
+  background: linear-gradient(90deg, #8e2418, #e8663c 60%, #ffb35c);
+  transform-origin: left center;
+  /* The snapshot only republishes when the whole second changes, so the scale
+     lands once a second; the transition is what makes that a glide rather than
+     fourteen visible steps. */
+  transition: transform 1s linear;
+}
+
+@keyframes avalanche-call {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem) scale(0.94);
   }
-  50% {
-    background: rgba(230, 96, 58, 0.94);
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
-.hud-avalanche {
-  align-self: flex-start;
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin: 0.4rem 0 0 1.1rem;
-  padding: 0.22rem 0.75rem;
+/*
+ * The announcement. Loud, and brief.
+ *
+ * It is the only time in a run when a trip that is normally survivable ends it,
+ * and a rule change the player cannot see is just an unfair death - the
+ * snowmobile filling the mirror behind them says the same thing, but only if
+ * they happen to look.
+ */
+.hud-avalanche-call {
+  align-self: center;
+  margin-top: 0.5rem;
+  padding: 0.26rem 0.9rem;
   border-radius: 999px;
+  background: rgba(196, 62, 42, 0.92);
   color: #fff;
-  font-size: 0.82rem;
-  font-weight: 800;
+  font-size: 0.9rem;
+  font-weight: 900;
   letter-spacing: 0.04em;
   text-shadow: none;
-  animation: avalanche-pulse 900ms ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hud-avalanche {
-    animation: none;
-    background: rgba(196, 62, 42, 0.9);
-  }
-}
-
-.hud-avalanche-seconds {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  animation: avalanche-call 220ms ease-out;
 }
 
 /* --- Revive offer ------------------------------------------------------ */
@@ -399,6 +495,7 @@ canvas {
 
 /* The one thing on the HUD that takes a tap, so it opts back into pointers. */
 .hud-pause {
+  position: relative;
   pointer-events: auto;
   display: grid;
   place-items: center;
@@ -416,8 +513,40 @@ canvas {
   touch-action: manipulation;
 }
 
+/*
+ * The hit box, grown to Android's 48 dp guidance without growing the disc.
+ *
+ * 2.3 rem is about 37 dp, and this is the only tappable thing in the HUD - so
+ * the answer is not to delete the disc for stylistic consistency with the
+ * untappable readouts beside it. The disc *is* the affordance. Scaling it up to
+ * meet the guidance instead would put a large dark circle over the track.
+ */
+.hud-pause::before {
+  content: '';
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: inherit;
+}
+
 .hud-pause:active {
   background: rgba(20, 45, 62, 0.6);
+}
+
+/*
+ * Score and combo as one instrument.
+ *
+ * Stretched rather than centred, so the meter is exactly as wide as the number
+ * it multiplies. That is the whole reason it moved here: `runtime.combo`,
+ * `bestCombo` and `multiplier` have all been simulated since the beginning and
+ * the entire visual expression of them was a detached `x2` pill in the corner,
+ * which reads as a separate fact rather than as something happening to the
+ * score.
+ */
+.hud-score-block {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
 }
 
 .hud-score {
@@ -426,15 +555,69 @@ canvas {
   letter-spacing: -0.02em;
 }
 
+.hud-combo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* Step 1: no combo bonus yet, or a power-up multiplier with no combo. */
+  --combo: #2fa8e0;
+}
+
+/*
+ * The escalation, which matters more than the bar.
+ *
+ * A colour that has visibly *changed* is read in peripheral vision; a bar that
+ * is seventy percent full is not, and peripheral vision is all the attention
+ * available while something is being steered. Cool through hot as the combo
+ * multiplier climbs to its ceiling.
+ */
+.hud-combo[data-step='2'] {
+  --combo: #2f9e5c;
+}
+
+.hud-combo[data-step='3'] {
+  --combo: #f0b429;
+}
+
+.hud-combo[data-step='4'] {
+  --combo: #e8663c;
+}
+
+.hud-combo[data-step='5'] {
+  --combo: #d8352b;
+}
+
+.hud-combo-track {
+  overflow: hidden;
+  flex: 1;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: rgba(20, 45, 62, 0.25);
+}
+
+.hud-combo-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--combo);
+  transform-origin: left center;
+  /* Just longer than the 100 ms publish, so the bar glides between snapshots
+     rather than stepping on each one. */
+  transition: transform 120ms linear;
+}
+
+.hud-combo-label {
+  flex: none;
+  color: var(--combo);
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
 .hud-coins {
   font-size: 1.25rem;
   font-weight: 700;
   color: #b8791a;
-}
-
-.hud-coins::before {
-  content: '◕ ';
-  color: #f0b429;
 }
 
 .hud-distance {
@@ -469,22 +652,29 @@ canvas {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hud-clock-low {
-    animation: none;
-  }
+/* `.hud-multiplier` used to live here: a detached `x2` pill in the left
+   margin, disconnected from the number it was multiplying. It is the combo
+   meter under the score now - see `.hud-combo`. Removed rather than left in
+   place, on the same reasoning as `.panel-scroll` below. */
+
+/*
+ * The HUD after the run has ended, under the results card or the revive offer.
+ *
+ * It stays mounted on purpose. Every number here is what the player watched for
+ * two minutes, and it used to vanish in a single frame at the moment of maximum
+ * drama - during a revive they were being asked to spend coins on a doubling
+ * price with the run's own numbers off screen.
+ *
+ * So it recedes rather than moving. Nothing shifts position: the whole value of
+ * keeping it is that the figures are exactly where they were last read, and the
+ * card grows out of them.
+ */
+.hud-settled .hud-distance {
+  opacity: 0.45;
 }
 
-.hud-multiplier {
-  align-self: flex-start;
-  margin: 0.4rem 0 0 1.1rem;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.95rem;
-  font-weight: 800;
-  text-shadow: none;
+.hud-settled .hud-combo-fill {
+  transition: none;
 }
 
 .hud-powerups {
@@ -540,24 +730,97 @@ canvas {
  * A full screen, not a card. The live scene runs behind it, so a scrim from
  * both edges keeps the type readable over whatever happens to be on screen -
  * a sunlit snowfield and a dark pine line are very different backdrops.
+ *
+ * The rider stands in the lower middle of that scene and is the product shot,
+ * so the layout below is written around a measured fact: with the menu camera
+ * (a standstill lens at `TUNING.camera.fov`, framed for the outer lane at the
+ * screen's aspect) the figure runs from **53% to 72% of the frame height**,
+ * board and contact shadow included. That band belongs to the character.
+ * Measured on the running build at 375x812, and it is a fraction rather than a
+ * pixel count because both terms of the projection scale with the viewport.
+ *
+ * Two things about that band are worth stating, because both were assumed and
+ * both were wrong. It is **19% of the frame tall, not 13%** - the figure grew
+ * when the camera dropped to `TUNING.camera.height` 3.2 - and it gets *taller*
+ * as the frame gets squarer, because `cameraDistanceFor` bottoms out at
+ * `minDistance` and then stops retreating while the frame keeps shortening. At
+ * 360x640 it measures 54% to 77%, which leaves 23% of the screen for every
+ * control on it. Nothing here may be sized as if the phone case were the only
+ * case.
  */
 .home {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  /* Scrolls on short screens rather than pushing the board card off the
-     bottom - the home screen has to be fully reachable on a small phone. */
+  gap: 0.4rem;
+  /* Scrolls on short screens rather than pushing the nav row off the bottom -
+     the home screen has to be fully reachable on a small phone. The two
+     spacers below collapse to nothing before this ever comes into play. */
   overflow-y: auto;
   overscroll-behavior: contain;
   /* See `.panel-scroll`: the global touch-action would otherwise stop this
      scrolling with a finger on a short screen. */
   touch-action: pan-y;
-  padding: calc(var(--safe-top) + 0.75rem) 1.25rem calc(var(--safe-bottom) + 1rem);
+  padding: calc(var(--safe-top) + 0.75rem) 1.25rem calc(var(--safe-bottom) + 0.85rem);
   color: #fff;
+  /*
+   * The lower scrim is a ramp, not a wash, and the stops are placed off the
+   * figure rather than chosen by eye.
+   *
+   * It is steepest across the bottom 17%, which is exactly the band the action
+   * stack now occupies, and it is dark enough there to hold white type without
+   * any per-button plate. Above that it falls away fast and is out of the way
+   * by 27% from the bottom, where the rider's contact shadow begins.
+   *
+   * That shadow is real lighting and the one thing on this screen worth
+   * reading; a scrim heavy enough to swallow it would trade the only shade in
+   * the frame for a decal. What survives above 27% is a whisper - enough that a
+   * pale yeti on pale snow still has a value gradient to stand against, not
+   * enough to flatten the shadow into it.
+   *
+   * The upper gradient's last stop is not its last value: with no stop after
+   * 34% it holds 0.12 all the way down, and that even wash over the live scene
+   * is the scrim proper. The ramp is laid on top of it.
+   */
   background:
     linear-gradient(to bottom, rgba(9, 28, 48, 0.62) 0%, rgba(9, 28, 48, 0.12) 34%),
-    linear-gradient(to top, rgba(9, 28, 48, 0.78) 0%, rgba(9, 28, 48, 0.1) 40%);
+    linear-gradient(
+      to top,
+      rgba(9, 28, 48, 0.86) 0%,
+      rgba(9, 28, 48, 0.72) 10%,
+      rgba(9, 28, 48, 0.46) 17%,
+      rgba(9, 28, 48, 0.16) 23%,
+      rgba(9, 28, 48, 0.07) 30%,
+      rgba(9, 28, 48, 0) 42%
+    );
+}
+
+/*
+ * The two flexible things on the screen, and the whole composition.
+ *
+ * Every other item here is content-sized, so all the slack in the column ends
+ * up in these two: the sky above the title, and the ground the rider stands on.
+ * `flex-basis: 0` makes the grow factors a ratio of the *whole* free space
+ * rather than of whatever is left over after an intrinsic height, so the stage
+ * takes three quarters of it at every viewport.
+ *
+ * Three quarters, not half. An even split is what the two `margin-top: auto`s
+ * this replaces produced, and it is wrong in a specific way: every pixel handed
+ * back at the bottom of the screen was immediately spent walking the records
+ * bar *down* onto the rider's crown. Measured, dropping the equipped-board
+ * caption alone moved the stats bar from 47.4% to 51.5% against a crown at
+ * 53% - the same collision, at the other end of the figure. The action stack is
+ * bottom-anchored whatever the ratio is, so the ratio buys nothing but the
+ * height of the sky, and the character wants that height more than the sky
+ * does. Measured at 375x812, 3:1 leaves 60 px between the bottom of the mode
+ * row's touch target and the rider's crown, where 1:1 left 27.
+ */
+.home-gap {
+  flex: 1 1 0;
+}
+
+.home-stage {
+  flex: 3 1 0;
 }
 
 .home-top {
@@ -576,9 +839,7 @@ canvas {
   color: #ffd66b;
 }
 
-.home-coins::before {
-  content: '◕ ';
-}
+/* The coin itself is defined once, with `.shop-coin`, near the end of the file. */
 
 .icon-button {
   display: grid;
@@ -595,8 +856,9 @@ canvas {
   touch-action: manipulation;
 }
 
+/* No `margin-top: auto`. The slack is placed by `.home-gap` above it, for the
+   reason given there. */
 .home-title-block {
-  margin-top: auto;
   text-align: center;
 }
 
@@ -643,32 +905,110 @@ canvas {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Everything you act on, held against the bottom edge by `.home-stage`.
+ *
+ * Its *height* is the composition, because it is bottom-anchored: the top of
+ * this block is wherever the viewport bottom minus its own height lands, and
+ * that edge has to clear the rider's contact shadow at 72% - or 77% on a 16:9
+ * frame. It used to measure 305 px on an 812 px screen and hold four rows, the
+ * topmost of which landed at 69% and cut the rider off at the board.
+ *
+ * It holds two rows now. The mode picker went up into the furniture band, and
+ * the equipped-board caption went altogether: it was a 3 cm drawing of the
+ * rider directly beneath the same rider at four times the size, opening a shop
+ * that is one button to its left. That argument was already written down here
+ * and applied only below `min-aspect-ratio: 1/2`, as though it depended on the
+ * shape of the screen. It never did. What it buys is 67 px at the bottom of the
+ * frame, which is the one place the composition cannot make space anywhere
+ * else, and the stack's top edge moves from 69% to 83%.
+ */
 .home-actions {
-  margin-top: auto;
+  /* No `margin-top: auto` - the stage above it does the anchoring. `none` so
+     that when a screen is short enough for the column to overflow, the stack
+     keeps its size and the page scrolls, rather than the Play button being
+     quietly squashed below a thumb's worth of height. */
+  flex: none;
 }
 
 /* --- Mode picker ------------------------------------------------------- */
 
+/*
+ * Four fixed columns, not a wrapping flex row.
+ *
+ * The real mode names are Endless, Time Attack, Blizzard and Daily Challenge,
+ * and at a phone's width `flex-wrap` measured them into three pills plus a
+ * full-width fourth: 66 px of ragged block, and the single largest thing
+ * standing between the rider and a clear frame. A grid is one row at any
+ * width, so the long names wrap *inside* their own chip - where a second line
+ * costs nothing, because the chips are sized for two either way.
+ *
+ * A fixed row was necessary and not sufficient: 37 px of chips at the top of a
+ * bottom-anchored stack still landed at 69% of the frame, across the rider's
+ * board. On the home screen the row sits under the records bar instead, and
+ * the flex gap places it - hence no bottom margin here. The Scores panel sets
+ * its own; see `.mode-picker-light`.
+ */
 .mode-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.35rem;
-  margin-bottom: 0.45rem;
 }
 
 .mode-chip {
-  flex: 1 1 auto;
-  padding: 0.45rem 0.6rem;
+  /* The grid owns the widths; a `flex` shorthand here would be dead code. */
+  position: relative;
+  display: grid;
+  place-items: center;
+  /* Two lines plus padding. Stated as a minimum rather than a height so a
+     narrow phone that needs a third line grows the chip instead of clipping
+     the label. */
+  min-height: 2.35rem;
+  padding: 0.35rem 0.3rem;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  /*
+   * A dark plate, not a white veil.
+   *
+   * White at 16% over the scrim was legible only because the row used to sit
+   * in the deepest part of it, at the bottom of the screen. Up beside the
+   * records bar it lands on lit snow and a fence line, where white type on a
+   * white wash is the least readable thing this palette can produce. The
+   * records card's own `rgba(0, 0, 0, 0.26)` is the language; this is the same
+   * idea carried a little further, because a chip is smaller than a card and
+   * has less of itself to read against.
+   */
+  background: rgba(6, 24, 42, 0.42);
   color: #fff;
   font-family: inherit;
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.15;
+  text-align: center;
   cursor: pointer;
   touch-action: manipulation;
+}
+
+/*
+ * The hit box, grown past the chip without growing the chip - the same trick
+ * `.hud-pause` uses, and for the same reason: the visible control is sized by
+ * the composition, the touch target is sized by the thumb. A chip is 37 px
+ * tall and this makes it ~50, against the 30 px it was before.
+ *
+ * It clears Android's 48 dp now, and only because the row moved. Sitting one
+ * gutter above the Play button it could not: a mode chip swallowing a tap
+ * meant for Play is a far worse bug than a chip that needs an accurate thumb,
+ * so the box was held asymmetric at ~45 px to leave Play's top edge alone.
+ * Below the row is the empty stage, so the box can be symmetric and full size.
+ *
+ * Horizontally it takes exactly half the gutter each side, so neighbouring
+ * chips meet and there is no dead strip between them.
+ */
+.mode-chip::before {
+  content: '';
+  position: absolute;
+  inset: -0.4rem -0.175rem;
+  border-radius: inherit;
 }
 
 .mode-chip-on {
@@ -717,7 +1057,7 @@ canvas {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.55rem;
-  margin-top: 0.65rem;
+  margin-top: 0.5rem;
 }
 
 .nav-button {
@@ -726,7 +1066,9 @@ canvas {
   flex-direction: column;
   align-items: center;
   gap: 0.15rem;
-  padding: 0.6rem 0.4rem;
+  /* Trimmed from 0.6rem for the height budget above, and no further: this
+     lands at ~53 dp, which is still clear of Android's 48 dp guidance. */
+  padding: 0.55rem 0.4rem;
   border: none;
   border-radius: 0.85rem;
   background: rgba(255, 255, 255, 0.16);
@@ -752,52 +1094,16 @@ canvas {
   background: #ff7a4d;
 }
 
-/* Equipped-board summary, doubling as a shortcut into the shop. */
-.home-board {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: 'swatch text';
-  align-items: center;
-  gap: 0.5rem 0.7rem;
-  margin-top: 0.75rem;
-  padding: 0.7rem 0.85rem;
-  border: none;
-  border-radius: 0.95rem;
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.home-board .board-preview {
-  grid-area: swatch;
-}
-
-/* Sits on a tinted tile so pale boards stay visible against any panel. */
-.board-preview {
-  flex: none;
-  display: block;
-  border-radius: 0.6rem;
-  background: rgba(150, 184, 214, 0.22);
-}
-
-.home-board-text {
-  grid-area: text;
-  display: flex;
-  flex-direction: column;
-}
-
-.home-board-name {
-  font-size: 0.98rem;
-  font-weight: 800;
-}
-
-.home-board-tagline {
-  font-size: 0.76rem;
-  opacity: 0.7;
-}
+/*
+ * `.home-board*` used to live here: the equipped-board caption, a swatch and
+ * two lines of label pinned under the nav row. It is gone, along with the
+ * `min-aspect-ratio: 1 / 2` rule that hid it on squarer frames - see
+ * `.home-actions` for why the argument for hiding it there was an argument for
+ * removing it everywhere. `.board-preview` went with it; it named a class no
+ * component has ever rendered, so it had been styling nothing for as long as it
+ * existed. Removed rather than left in place, on the same reasoning as
+ * `.hud-multiplier` above.
+ */
 
 /* --- Board stats ------------------------------------------------------- */
 
@@ -906,8 +1212,12 @@ canvas {
   align-items: center;
   justify-content: center;
   padding: calc(var(--safe-top) + 1rem) 1.25rem calc(var(--safe-bottom) + 1rem);
+  /* Scrim only, no `backdrop-filter`. `App` declares no `frameloop`, so the
+     Canvas defaults to `always` and keeps rendering behind every menu - a blur
+     here is a per-frame blur of the whole live 3D scene, for a card that is
+     already 94% opaque and does not need one. Removed for the same reason
+     `.page` never had it. */
   background: rgba(20, 45, 62, 0.32);
-  backdrop-filter: blur(2px);
 }
 
 .panel-card {
@@ -918,6 +1228,40 @@ canvas {
   box-shadow: 0 1.5rem 3rem rgba(15, 40, 60, 0.25);
   text-align: center;
   color: var(--ink);
+}
+
+@keyframes panel-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+ * The results card arrives *through* the crash flash rather than under it.
+ *
+ * See `.flash`: it sits at `z-index: 50` against this card's 30, siblings with
+ * no stacking context between them, so the cool-white wash decays over the top
+ * of the card. That is kept deliberately - the wash is the wipe the result
+ * arrives through - which only works if the card is not already sitting there
+ * underneath it. Hence the delay.
+ *
+ * `backwards` is load-bearing: without it the card is fully drawn during the
+ * delay and then fades in from nothing, which is worse than no animation.
+ *
+ * **The delay must agree with `CARD_DELAY_SECONDS` in `app/GameOver.tsx`**,
+ * which holds the counting numbers back to match. A tally that runs while the
+ * card is transparent is spent on an element nobody can see.
+ *
+ * Only the results card. The revive offer has four seconds on a clock and does
+ * not get held back for anything.
+ */
+.panel-card-enter {
+  animation: panel-card-in 260ms ease-out 320ms backwards;
 }
 
 .panel-title {
@@ -933,10 +1277,19 @@ canvas {
   opacity: 0.7;
 }
 
+/*
+ * Two columns, not three.
+ *
+ * The results card carries four figures now that the run's best combo is on it
+ * - it was already in `runStats()` and appeared on no screen in the app - and
+ * four across a 21 rem card is four cramped columns with a two-word label in
+ * one of them. Two by two also squares up the pause card, which only ever had
+ * two and left a third of its row empty.
+ */
 .panel-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 0.75rem;
   margin: 1.5rem 0;
 }
 
@@ -1037,6 +1390,59 @@ canvas {
   font-size: 0.95rem;
   font-weight: 800;
   color: var(--accent);
+}
+
+/*
+ * Missions this run finished.
+ *
+ * `commitRun` banks mission progress the instant a run ends, and the card said
+ * nothing about it - so the single best reason to press Run again was announced
+ * only on a screen the player had to go looking for. Left-aligned inside a
+ * centred card on purpose: it is a list, and a centred list of variable-length
+ * objectives has no edge to read down.
+ */
+.panel-missions {
+  margin: -0.4rem 0 0.2rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.8rem;
+  background: rgba(47, 158, 92, 0.1);
+  text-align: left;
+}
+
+.panel-missions-title {
+  margin-bottom: 0.4rem;
+  color: #2f9e5c;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-missions ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  list-style: none;
+}
+
+.panel-missions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.panel-mission-reward {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 0.3rem;
+  color: #a8690f;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 /* `.panel-scroll`, `.panel-card-wide` and `.panel-header` used to live here.
@@ -1713,8 +2119,18 @@ canvas {
   white-space: nowrap;
 }
 
-/* The coin, so a number with a price attached never reads as a plain number. */
-.shop-coin {
+/*
+ * The coin, so a number with a price attached never reads as a plain number.
+ *
+ * One treatment everywhere, which is why the two counters live down here with
+ * the shop rather than beside their own rules. The HUD and the home screen both
+ * prefixed their balance with `◕` - a glyph that is not a coin in any font,
+ * renders as a filled circle with a bite out of it, and was the app's coin
+ * rather than a one-off, since both used the same fallback.
+ */
+.shop-coin,
+.hud-coins::before,
+.home-coins::before {
   display: inline-block;
   width: 0.85rem;
   height: 0.85rem;
@@ -1722,6 +2138,20 @@ canvas {
   border: 2px solid #c98a1f;
   border-radius: 999px;
   background: #f0b429;
+}
+
+/*
+ * Sized in `em` where it prefixes a number, so it tracks the two different type
+ * sizes those counters use instead of drifting against them.
+ */
+.hud-coins::before,
+.home-coins::before {
+  content: '';
+  width: 0.78em;
+  height: 0.78em;
+  margin-right: 0.32em;
+  border-width: 0.13em;
+  vertical-align: -0.02em;
 }
 
 .shop-button-buy {
@@ -1739,4 +2169,68 @@ canvas {
   font-size: 0.72rem;
   font-weight: 500;
   opacity: 0.6;
+}
+
+/* --- Reduced motion ---------------------------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * One policy, stated once.
+ *
+ * `reduce` asks for less *vestibular* motion - the sliding, scaling and
+ * travelling that can make somebody ill. It does not ask for the removal of all
+ * feedback, which is what four scattered `animation: none` blocks had quietly
+ * added up to: a player with the OS setting on got no HUD response to anything
+ * that happened to them, in a game whose entire feedback layer is visual.
+ *
+ * So the rule is: drop the transforms, keep every opacity and colour cue.
+ * Anything animated added above has to come down here and make that choice
+ * explicitly rather than reaching for `animation: none` on the spot.
+ *
+ * Last in the file so it wins over every rule above it whatever order those
+ * arrive in.
+ */
+@media (prefers-reduced-motion: reduce) {
+  /* Pure scale, and nothing is lost: the number still changes, and the clock
+     still turns orange for its last ten seconds. */
+  .hud-pop,
+  .hud-clock-low {
+    animation: none;
+  }
+
+  /* These three carry a fade as well as a translate. Re-declared rather than
+     switched off, so each still announces itself arriving. */
+  .hud-coach,
+  .hud-avalanche-call {
+    animation: fade-in 200ms ease-out;
+  }
+
+  /* Delay held, for the reason given at `.panel-card-enter` - the numbers are
+     waiting on it, and `CountUp` skips its own tally under `reduce` anyway. */
+  .panel-card-enter {
+    animation: fade-in 200ms ease-out 320ms backwards;
+  }
+
+  /* Bars still fill and drain. They just arrive at the new value rather than
+     gliding to it, which is the travelling part. */
+  .hud-combo-fill,
+  .hud-avalanche-drain,
+  .revive-clock-fill,
+  .hud-powerup-drain {
+    transition: none;
+  }
+
+  /* Buttons keep their colour response and lose the nudge. */
+  .play-button:active,
+  .panel-button:active {
+    transform: none;
+  }
 }

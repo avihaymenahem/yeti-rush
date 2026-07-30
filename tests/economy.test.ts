@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { MissionInstance, RunStats } from '@/game/content/missions';
 import {
   durationsFor,
   POWER_UP_IDS,
@@ -25,7 +26,8 @@ import {
   worstCaseLaneChangeDuration,
   worstCaseSpeed,
 } from '@/game/content/skins';
-import { DEFAULT_SKIN } from '@/game/state/saveSchema';
+import { useMetaStore } from '@/game/state/metaStore';
+import { createDefaultSave, DEFAULT_SKIN } from '@/game/state/saveSchema';
 
 describe('skins', () => {
   it('keys every entry by its own id', () => {
@@ -44,13 +46,28 @@ describe('skins', () => {
     }
   });
 
-  it('gives every skin a complete, valid colour set', () => {
+  /*
+   * The deck palette, and only the deck palette.
+   *
+   * This used to walk `fur`, `furShade` and `face` as well, which is the shape
+   * of a bug rather than a guarantee: riders were split out into
+   * `characters.ts` and those three have been dead ever since, so the test was
+   * requiring every future board to carry three colours that do nothing - and
+   * keeping "buying a snowboard recolours the yeti riding it" representable in
+   * the type. They are gone from `SkinDef`, so the assertion is rewritten to
+   * what a board actually owns rather than relaxed to whatever still compiles.
+   */
+  it('gives every skin a complete, valid deck palette and no rider colour', () => {
     const hex = /^#[0-9a-fA-F]{6}$/;
     for (const id of SKIN_IDS) {
       const skin = skinDef(id);
-      for (const colour of [skin.fur, skin.furShade, skin.face, skin.board, skin.boardTrim]) {
+      for (const colour of [skin.board, skin.boardTrim]) {
         expect(colour).toMatch(hex);
       }
+      // The counterweight: "every colour is a valid hex" is satisfied perfectly
+      // by a board that has quietly grown a fur colour again, which is exactly
+      // the state this codebase was in for four releases.
+      expect(Object.keys(skin).filter((key) => /fur|face|skin|rider/i.test(key))).toEqual([]);
     }
   });
 
@@ -217,5 +234,100 @@ describe('durationsFor', () => {
     const durations = durationsFor({ magnet: -2, nonsense: 9 });
     expect(durations.magnet).toBeCloseTo(powerUpDef('magnet').duration, 9);
     expect(Object.keys(durations).sort()).toEqual([...POWER_UP_IDS].sort());
+  });
+});
+
+/*
+ * Banking a run.
+ *
+ * `commitRun` is the one moment a run becomes permanent - coins, records and
+ * mission progress all move together, and it is the only place that can know
+ * which objectives this run finished, because the diff has to be taken against
+ * the progress that existed a moment before it overwrote it. The results card
+ * reads that answer, so getting it wrong is silent: the card simply says
+ * nothing, exactly as it did when the feature did not exist.
+ */
+
+const COIN_MISSION: MissionInstance = {
+  id: 'coins',
+  metric: 'coins',
+  target: 150,
+  reward: 180,
+  description: 'Collect 150 coins',
+};
+
+const COMBO_MISSION: MissionInstance = {
+  id: 'combo',
+  metric: 'bestCombo',
+  target: 20,
+  reward: 252,
+  description: 'Clear 20 obstacles without a slip',
+};
+
+/** Puts the store on a known save and a known day's missions. */
+function staged(missions: MissionInstance[], progress: Record<string, number> = {}): void {
+  useMetaStore.setState({
+    save: { ...createDefaultSave(), missions: progress },
+    missions,
+    lastRun: { bestCombo: 0, completedMissions: [] },
+  });
+}
+
+/** A finished run, in the shape `commitRun` takes. */
+function finishedRun(
+  overrides: Partial<RunStats> = {},
+): RunStats & { score: number; mode: string } {
+  return {
+    distance: 0,
+    coins: 0,
+    bestCombo: 0,
+    rampLaunches: 0,
+    powerUpsCollected: 0,
+    phased: 0,
+    runs: 1,
+    score: 0,
+    mode: 'endless',
+    ...overrides,
+  };
+}
+
+describe('commitRun', () => {
+  it('reports exactly the missions this run finished', () => {
+    staged([COIN_MISSION, COMBO_MISSION], { coins: 120 });
+
+    const summary = useMetaStore.getState().commitRun(finishedRun({ coins: 40, bestCombo: 9 }));
+
+    // The coin mission crossed 150 on this run's forty. The combo one did not
+    // come close, which is what stops "reports the completions" being satisfied
+    // by reporting all of them.
+    expect(summary.completedMissions.map((mission) => mission.id)).toEqual(['coins']);
+    expect(useMetaStore.getState().lastRun).toBe(summary);
+  });
+
+  it('says nothing when the run did not push anything over', () => {
+    // The counterweight to the test above, and the one that matters: a run that
+    // banked the same progress the save already had must produce an empty card,
+    // or the completion notice fires on every run for ever.
+    staged([COIN_MISSION, COMBO_MISSION], { coins: 120 });
+
+    const summary = useMetaStore.getState().commitRun(finishedRun({ coins: 5 }));
+    expect(summary.completedMissions).toEqual([]);
+  });
+
+  it('does not re-announce a mission that was already complete', () => {
+    staged([COIN_MISSION], { coins: 400 });
+
+    const summary = useMetaStore.getState().commitRun(finishedRun({ coins: 60 }));
+    expect(summary.completedMissions).toEqual([]);
+    // Still banked, though - the progress keeps climbing, it is only the
+    // announcement that is once.
+    expect(useMetaStore.getState().save.missions['coins']).toBe(460);
+  });
+
+  it('carries the best combo through for the results card', () => {
+    staged([]);
+    const summary = useMetaStore.getState().commitRun(finishedRun({ bestCombo: 31 }));
+    expect(summary.bestCombo).toBe(31);
+    expect(useMetaStore.getState().lastRun.bestCombo).toBe(31);
   });
 });

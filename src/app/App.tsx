@@ -233,14 +233,32 @@ export function App() {
       {/* Grade and vignette, composited rather than rendered. */}
       <div className="grade" aria-hidden="true" />
 
-      {/* Impact flash. Rendered once and never re-rendered - its opacity is
-          driven from the frame loop through `platform/screenFlash`, because a
-          value that changes every frame must not go through React. */}
+      {/* Speed and impact tint at the frame edges, and the impact flash over
+          everything. Their opacity is driven from the frame loop through
+          `platform/screenFlash`, because a value that changes every frame must
+          not go through React. The ids are what that module looks them up by.
+
+          The tint is hidden outside a live run, and that is not cosmetic: its
+          floor comes from `runtime.speed`, which does not fall when a run ends
+          - so without this it would sit at whatever the run finished on, across
+          the results card and every menu behind it, for ever. Hiding rather
+          than zeroing, because the loop owns the value and React must not write
+          it. The flash deliberately stays: it is the wipe the results card
+          arrives through. */}
+      <div className={riding ? 'rush' : 'rush rush-off'} id="rush" aria-hidden="true" />
       <div className="flash" id="flash" aria-hidden="true" />
 
       <InputSurface onGesture={handleGesture} />
 
-      {riding && <Hud />}
+      {/* The HUD outlives the run. At the moment of maximum drama every number
+          the player has watched for two minutes used to vanish in a single
+          frame - and during a revive they are asked to spend coins on a
+          doubling price with the run's own numbers off screen. `settled` drops
+          the pause button and the transients; the rest stays put and the card
+          grows out of it. Paused keeps its own menu and does not need it, and a
+          finished run that has wandered off to Scores does not either - that is
+          the same condition the results card itself mounts on. */}
+      {(riding || offeringRevive || (finished && screen === 'home')) && <Hud settled={!riding} />}
       {paused && <Paused onHome={goHome} />}
       {offeringRevive && <Revive />}
       {atHome && <Home onNavigate={navigate} />}

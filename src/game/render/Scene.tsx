@@ -9,21 +9,30 @@
  * pipeline nothing at all.
  *
  * What does the visual work instead is hue: a warm key against cool ambient and
- * a cold rim, a graded sky with a sun in it, and layered mountains for depth.
+ * a cool fill, a graded sky with a sun in it, and layered mountains for depth.
+ *
+ * The rig below is the other half of the look, and the part that is easiest to
+ * get wrong: what the camera is *allowed* to do is written down in
+ * `CAMERA_FEEL`, and the short version is that framing may change and position
+ * may not. Read that block before adding anything to `CameraRig`.
  */
 
 import { useFrame } from '@react-three/fiber';
-import { lazy, Suspense, useMemo, useRef } from 'react';
-import * as THREE from 'three';
+import { lazy, Suspense, useRef } from 'react';
+import type * as THREE from 'three';
 import { TUNING } from '@/game/config/tuning';
-import { ATMOSPHERE, PALETTE } from '@/game/config/visuals';
-import { clamp01, damp } from '@/game/core/math';
+import { ATMOSPHERE, CAMERA_FEEL, PALETTE } from '@/game/config/visuals';
+import { damp } from '@/game/core/math';
+import { CarveTrail } from '@/game/render/CarveTrail';
 import { Chaser } from '@/game/render/Chaser';
 import { CoinField } from '@/game/render/CoinField';
 import { Fences } from '@/game/render/Fences';
 import { GameLoop } from '@/game/render/GameLoop';
+import { LandingMark } from '@/game/render/LandingMark';
 import { Lighting } from '@/game/render/Lighting';
+import { Markers } from '@/game/render/Markers';
 import { Mountains } from '@/game/render/Mountains';
+import { carve01, lateralSpeed } from '@/game/render/nearField';
 import { Obstacles } from '@/game/render/Obstacles';
 import { Pickups } from '@/game/render/Pickups';
 import { PlatformBridge } from '@/game/render/PlatformBridge';
@@ -36,7 +45,8 @@ import { SnowSpray } from '@/game/render/SnowSpray';
 import { Track } from '@/game/render/Track';
 import { Village } from '@/game/render/Village';
 import { runtime } from '@/game/state/runtime';
-import { cameraDistanceFor } from '@/game/systems/camera';
+import { cameraDistanceFor, speedFovFor } from '@/game/systems/camera';
+import { feedback } from '@/game/systems/feedback';
 
 /**
  * The perf overlay is reached only through this dynamic import, inside a branch
@@ -44,38 +54,70 @@ import { cameraDistanceFor } from '@/game/systems/camera';
  * `r3f-perf` (~220 kB) out of the shipped bundle - a static import would ship
  * it to every player for a tool none of them can open.
  */
-const PerfOverlay = import.meta.env.DEV
-  ? lazy(() => import('@/game/render/PerfOverlay'))
-  : null;
+const PerfOverlay = import.meta.env.DEV ? lazy(() => import('@/game/render/PerfOverlay')) : null;
 
-/**
- * Extra degrees of field of view at top speed.
- *
- * The only thing the camera does that the player did not ask for, now that the
- * shake is gone. It works where shake did not because it is a *framing* change
- * rather than a movement: the edges of the frame stretch, nothing the player is
- * aiming at moves, and it is tied to speed rather than to events.
- */
-const SPEED_FOV_KICK = 9;
+const DEGREES = Math.PI / 180;
 
 /**
  * Chase camera. It follows the player's lane only partially - a camera locked
  * to the player makes the lane change invisible, because nothing moves
  * relative to the frame - and it pulls back far enough that the outer lanes
- * stay on screen at the current aspect ratio.
+ * stay on screen at the current aspect ratio and the current lens.
  *
- * Field of view widens with speed. That is the cheapest speed cue there is: the
- * edges of the frame stretch as the run accelerates, and it costs nothing.
+ * **It does not translate for anything that happens *to* the player.** There
+ * used to be a rumble that built as the patrol closed in and a punch on every
+ * crash and landing; both are gone because they were hated, and a camera that
+ * moves on its own is the one thing this rig must not do. What is allowed is
+ * *framing* - the field of view may change, because the edges of the frame
+ * stretch while nothing the player is aiming at moves. See `CAMERA_FEEL`.
  *
- * It does not shake, for anything, ever. There used to be a rumble that built
- * as the patrol closed in and a punch on every crash and landing; both are gone
- * because they were hated, and a camera that moves on its own is the one thing
- * this rig must not do.
+ * The lens is now driven from two independent channels that must not be
+ * confused with each other:
+ *
+ * - the **speed lens**, a slow widening across the run, which the dolly tracks;
+ * - the **punch**, a sharp additive impulse off `feedback.rush`, which the dolly
+ *   must never see. Wiring the punch into the distance turns a five degree
+ *   framing kick into a camera lurch of over a metre, which is exactly the
+ *   banned shake arriving through the back door.
  */
 function CameraRig() {
+  /**
+   * The damped speed lens, held apart from `camera.fov` because `camera.fov`
+   * also carries the punch. Damping the sum towards a target that does not
+   * include the punch would drag every impulse straight back out again, and the
+   * two channels would fight over the same number sixty times a second.
+   */
+  const speedFovRef = useRef<number>(TUNING.camera.fov);
+
   // The camera comes from the frame state rather than `useThree` - this rig
   // only ever mutates it imperatively, so there is nothing to subscribe to.
   useFrame(({ camera, size }, delta) => {
+    const aspect = size.width / size.height;
+    const perspective = camera as THREE.PerspectiveCamera;
+
+    /*
+     * Lens first, distance second, and that order is the fix rather than a
+     * tidy-up. The old rig derived the pull-back from `TUNING.camera.fov` - the
+     * *base* lens - while widening the live one, so it framed for a lens it was
+     * not rendering with and did it from the previous frame's value. Two
+     * dampers at different rates (position lambda 1e-4, tau ~0.11 s; fov 2e-2,
+     * tau ~0.25 s) were left disagreeing about the same visual quantity.
+     */
+    let speedFov = speedFovRef.current;
+    if (perspective.isPerspectiveCamera) {
+      speedFov = damp(speedFov, speedFovFor(runtime.speed), 0.02, delta);
+      speedFovRef.current = speedFov;
+
+      // Additive, and additive is what makes it safe: `horizontalHalfExtentAt`
+      // increases with fov, so a widening impulse can only ever show *more* of
+      // the track than the outer-lane guarantee was proved against.
+      const nextFov = speedFov + feedback.rush * CAMERA_FEEL.punchDegrees;
+      if (Math.abs(nextFov - perspective.fov) > 0.001) {
+        perspective.fov = nextFov;
+        perspective.updateProjectionMatrix();
+      }
+    }
+
     const targetX = runtime.lane.x * TUNING.camera.laneFollow;
     camera.position.x = damp(camera.position.x, targetX, 0.0001, delta);
 
@@ -83,23 +125,60 @@ function CameraRig() {
     const targetY = TUNING.camera.height + runtime.player.y * TUNING.camera.jumpFollow;
     camera.position.y = damp(camera.position.y, targetY, 0.0001, delta);
 
-    // Recomputed per frame so a rotation or split-screen resize reframes
-    // immediately; it is a handful of arithmetic ops.
-    const targetZ = cameraDistanceFor(size.width / size.height);
-    camera.position.z = damp(camera.position.z, targetZ, 0.0001, delta);
+    /*
+     * Recomputed per frame so a rotation or split-screen resize reframes
+     * immediately; it is a handful of arithmetic ops.
+     *
+     * The target reads the **speed lens only** - see the note above - so the
+     * dolly glides in across a run and ignores every punch.
+     *
+     * The clamp underneath it reads the **live** lens, and it is the framing
+     * guarantee stated directly: the frame being rendered must show
+     * `requiredHalfExtent()` of track, and that is exactly
+     * `z >= cameraDistanceFor(aspect, renderedFov)`. It can only ever push the
+     * camera *back*, so it cannot produce a lurch towards the player - and
+     * because the punch only widens, it goes slack during one rather than
+     * fighting it. What it does catch is the transient the old code let
+     * through: a lens still damping down while the dolly has already arrived,
+     * and an aspect that changed on this frame rather than over a quarter of a
+     * second, both of which used to leave the outer lane briefly off screen.
+     */
+    const targetZ = cameraDistanceFor(aspect, speedFov);
+    const dampedZ = damp(camera.position.z, targetZ, 0.0001, delta);
+    camera.position.z = Math.max(dampedZ, cameraDistanceFor(aspect, perspective.fov));
 
-    const perspective = camera as THREE.PerspectiveCamera;
-    if (perspective.isPerspectiveCamera) {
-      const speed01 = clamp01(
-        (runtime.speed - TUNING.speed.start) / (TUNING.speed.max - TUNING.speed.start),
-      );
-      const targetFov = TUNING.camera.fov + speed01 * SPEED_FOV_KICK;
-      const nextFov = damp(perspective.fov, targetFov, 0.02, delta);
-      if (Math.abs(nextFov - perspective.fov) > 0.001) {
-        perspective.fov = nextFov;
-        perspective.updateProjectionMatrix();
-      }
-    }
+    /*
+     * Lane-change roll, and the only camera *movement* in the game.
+     *
+     * The recorded objection is narrower than "the camera must not move": shake
+     * was tried on crashes, landings, near misses and patrol pressure, all
+     * things that happen *to* the player. This is driven by the swipe, so the
+     * player caused every degree of it, and it ends when the lane change does.
+     * It is still the camera moving, so it ships behind `rollDegrees` and that
+     * constant ships at zero - at which point the expression below is exactly
+     * the identity `(0, 1, 0)` and costs a sine and a cosine.
+     *
+     * Driven from `carve01`, the same signed lateral speed `Player.tsx` leans
+     * off, so the rider and the frame are guaranteed in phase. Not the
+     * remaining lane travel the proposal suggested: that is maximal on the
+     * frame the swipe lands, so the roll would arrive as a step, and a step in
+     * camera roll is precisely the "the camera moved on its own" read this
+     * project has already been burnt by. `6t(1-t)` starts at zero, peaks
+     * mid-travel and returns to zero as the ease completes.
+     *
+     * `camera.up` is set *before* `lookAt`, which is the whole mechanism.
+     * `lookAt` rebuilds the rotation from scratch out of position, target and
+     * up, so any roll written afterwards is silently discarded - which is why
+     * this rig has never rolled, and it was a side effect rather than a
+     * decision.
+     */
+    const control = runtime.board.control;
+    const roll =
+      Math.sign(lateralSpeed(runtime.lane, control)) *
+      carve01(runtime.lane, control) *
+      CAMERA_FEEL.rollDegrees *
+      DEGREES;
+    camera.up.set(-Math.sin(roll), Math.cos(roll), 0);
 
     camera.lookAt(
       runtime.lane.x * TUNING.camera.laneFollow * 0.5,
@@ -111,87 +190,20 @@ function CameraRig() {
   return null;
 }
 
-/** Faint, because the key light's cast shadow is now the dramatic one. */
-const CONTACT_OPACITY = 0.2;
-
-/**
- * A flat translucent disc directly under the player, shrinking and fading as
- * they rise.
+/*
+ * The contact blob that used to live here has gone, and `LandingMark` is what
+ * replaced it. Recorded because it looks like something was simply deleted.
  *
- * Kept even now that the key light casts real shadows, and deliberately made
- * fainter rather than removed. The cast shadow is thrown off to the right by a
- * raking light, which is what sells the lighting but is a poor altitude gauge -
- * height and lane offset both move it sideways. This sits square underneath and
- * answers "how high am I, over what" on its own, which at thirty units a second
- * is a gameplay readout rather than decoration.
+ * It was a translucent disc under the player that *faded out* as they rose -
+ * exactly the wrong end of the height range, since a grounded player already has
+ * a real cast shadow directly beneath them and an airborne one has nothing. It
+ * was also, measurably, doing almost nothing where it did draw: it composited
+ * `PALETTE.snowShadow` at 0.32, and that hex is an *albedo*, so through an unlit
+ * basic material and ACES it reaches the screen at luminance 149 - **brighter
+ * than the lit piste at 144.5**. Over the piste it lightened the snow by 1.4
+ * levels and over the untouched field it was worth 5.1, against the 70 the key
+ * light's own contact shadow delivers. Retiring it is what pays for the mark.
  */
-/**
- * A radial falloff drawn once into a small canvas.
- *
- * The disc this replaced was a sixteen-segment circle with a hard rim, which
- * read as a polygon stamped on the snow next to a genuinely soft cast shadow.
- * A gradient costs one 64x64 texture and no geometry, and needs no shader.
- * `pow` on the alpha keeps the middle dark and pulls the falloff outwards,
- * because a straight linear ramp reads as a grey smudge with no centre.
- */
-function contactTexture(): THREE.Texture {
-  const size = 64;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-
-  const context = canvas.getContext('2d');
-  if (context) {
-    const image = context.createImageData(size, size);
-    const centre = (size - 1) / 2;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const dx = (x - centre) / centre;
-        const dy = (y - centre) / centre;
-        const falloff = clamp01(1 - Math.hypot(dx, dy));
-        const i = (y * size + x) * 4;
-        image.data[i] = 255;
-        image.data[i + 1] = 255;
-        image.data[i + 2] = 255;
-        image.data[i + 3] = Math.round(255 * Math.pow(falloff, 1.6));
-      }
-    }
-    context.putImageData(image, 0, 0);
-  }
-
-  const texture = new THREE.Texture(canvas);
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function BlobShadow() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const texture = useMemo(() => contactTexture(), []);
-
-  useFrame(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
-    mesh.position.x = runtime.lane.x;
-    // Full size and darkest on the ground, gone by peak jump height.
-    const height01 = clamp01(runtime.player.y / TUNING.player.jumpPeakHeight);
-    mesh.scale.setScalar(1 - height01 * 0.45);
-    (mesh.material as THREE.MeshBasicMaterial).opacity = CONTACT_OPACITY * (1 - height01 * 0.7);
-  });
-
-  return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, TUNING.player.z]}>
-      <planeGeometry args={[1.5, 1.5]} />
-      <meshBasicMaterial
-        map={texture}
-        color={PALETTE.snowShadow}
-        transparent
-        opacity={CONTACT_OPACITY}
-        depthWrite={false}
-      />
-    </mesh>
-  );
-}
 
 export function Scene() {
   return (
@@ -215,6 +227,10 @@ export function Scene() {
 
       <Track />
       <Fences />
+      {/* Beside the run rather than on it. The only thing in the scene that
+          passes the camera, and the only continuous rate cue that works at the
+          speed a run opens at. */}
+      <Markers />
       <Village />
       <Ramps />
       <Rails />
@@ -223,7 +239,13 @@ export function Scene() {
       <Pickups />
       <Chaser />
       <Player />
-      <BlobShadow />
+      {/* Marks in the snow, under everything that stands on it. All are
+          `depthWrite: false`, so three.js draws them after the opaque pass
+          whatever order they appear in here - the mark carries a negative
+          `renderOrder` because it multiplies the framebuffer and so has to go
+          first, before anything airborne is composited into it. */}
+      <LandingMark />
+      <CarveTrail />
       <SnowSpray />
       <Snow />
 

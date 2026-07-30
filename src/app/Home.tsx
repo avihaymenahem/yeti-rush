@@ -6,22 +6,22 @@
  * should feel like the front of the game, not an interruption to it. The live
  * scene keeps running behind, dimmed by a scrim so the type stays readable
  * whatever is on screen.
+ *
+ * **Three bands, and the middle one is empty on purpose.** The rider standing
+ * in the live scene is the product shot; measured on the running build they
+ * occupy 53% to 72% of the frame height, contact shadow included. So the screen
+ * is furniture at the top (title, records, the mode you are about to play), the
+ * character alone in the middle, and the one thing you act on at the bottom.
+ * The two spacers are what hold that apart - see `.home-stage` in `index.css`,
+ * which is where the reasoning and the measurements live.
  */
 
 import { useState } from 'react';
-import { RiderPreview } from '@/app/RiderPreview';
 import { Icon } from '@/app/Icon';
 import { NavIcons } from '@/app/icons';
 import type { Screen } from '@/app/screens';
 import { TapButton } from '@/app/TapButton';
-import {
-  DEFAULT_MODE,
-  GAME_MODE_IDS,
-  gameModeDef,
-  type GameModeId,
-} from '@/game/content/modes';
-import { characterDef } from '@/game/content/characters';
-import { skinDef } from '@/game/content/skins';
+import { DEFAULT_MODE, GAME_MODE_IDS, gameModeDef, type GameModeId } from '@/game/content/modes';
 import { useMetaStore } from '@/game/state/metaStore';
 import { startRun } from '@/game/state/runController';
 import { canClaimDaily, localDateKey } from '@/game/systems/dailyCycle';
@@ -32,8 +32,6 @@ export interface HomeProps {
 
 export function Home({ onNavigate }: HomeProps) {
   const save = useMetaStore((state) => state.save);
-  const board = skinDef(save.equippedSkin);
-  const rider = characterDef(save.equippedCharacter);
   const dailyAvailable = canClaimDaily(save.lastDailyClaim, localDateKey(new Date()));
 
   // The chosen mode lives here rather than in a store: it is a menu choice, and
@@ -60,6 +58,10 @@ export function Home({ onNavigate }: HomeProps) {
         </TapButton>
       </header>
 
+      {/* Sky. Takes a third of whatever height is going spare; the stage below
+          takes the other two. */}
+      <div className="home-gap" aria-hidden="true" />
+
       <div className="home-title-block">
         <h1 className="home-title">Yeti Rush</h1>
         <p className="home-tagline">Alpine endless run</p>
@@ -80,26 +82,35 @@ export function Home({ onNavigate }: HomeProps) {
         </div>
       </dl>
 
-      <div className="home-actions">
-        {/* Mode picker. Chips rather than a dropdown: four options that all
-            need explaining are better shown than hidden behind a control. */}
-        <div className="mode-picker" role="radiogroup" aria-label="Game mode">
-          {GAME_MODE_IDS.map((id) => {
-            const def = gameModeDef(id);
-            return (
-              <TapButton
-                key={id}
-                role="radio"
-                aria-checked={id === mode}
-                className={id === mode ? 'mode-chip mode-chip-on' : 'mode-chip'}
-                onTap={() => setMode(id)}
-              >
-                {def.name}
-              </TapButton>
-            );
-          })}
-        </div>
+      {/* Mode picker. Chips rather than a dropdown: four options that all need
+          explaining are better shown than hidden behind a control.
 
+          It belongs to the top band, with the rest of the furniture, and that
+          placement is the whole point of this screen's layout. As the last row
+          of a bottom-anchored action stack it was the first thing to climb into
+          the frame, and it climbed straight across the rider's board. */}
+      <div className="mode-picker" role="radiogroup" aria-label="Game mode">
+        {GAME_MODE_IDS.map((id) => {
+          const def = gameModeDef(id);
+          return (
+            <TapButton
+              key={id}
+              role="radio"
+              aria-checked={id === mode}
+              className={id === mode ? 'mode-chip mode-chip-on' : 'mode-chip'}
+              onTap={() => setMode(id)}
+            >
+              {def.name}
+            </TapButton>
+          );
+        })}
+      </div>
+
+      {/* The character's band. Nothing is drawn here by the DOM - that is the
+          point of it. */}
+      <div className="home-stage" aria-hidden="true" />
+
+      <div className="home-actions">
         <TapButton className="play-button" onTap={() => startRun(mode)}>
           Play
         </TapButton>
@@ -120,22 +131,6 @@ export function Home({ onNavigate }: HomeProps) {
           </TapButton>
         </nav>
       </div>
-
-      <TapButton
-        className="home-board"
-        onTap={() => onNavigate('shop')}
-        aria-label={`${rider.name} on the ${board.name}. Open the shop.`}
-      >
-        {/* Both halves of the outfit, since both are now chosen separately and
-            this button is the only place the pairing is seen outside a run. */}
-        <RiderPreview character={rider} skin={board} size={44} />
-        <span className="home-board-text">
-          <span className="home-board-name">
-            {rider.name} · {board.name}
-          </span>
-          <span className="home-board-tagline">{board.tagline}</span>
-        </span>
-      </TapButton>
     </div>
   );
 }

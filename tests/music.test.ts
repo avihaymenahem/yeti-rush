@@ -15,6 +15,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '@/game/config/tuning';
+import { clamp01 } from '@/game/core/math';
+import { speedProgress } from '@/game/systems/difficulty';
 import {
   BARS_PER_CYCLE,
   BARS_PER_PHRASE,
@@ -38,6 +41,36 @@ function cycle(level: MusicIntensity) {
 
 function rolesAt(index: number, level: MusicIntensity): VoiceRole[] {
   return voicesForStep(index, level).map((voice) => voice.role);
+}
+
+/**
+ * What the game loop actually feeds the score at a given run speed.
+ *
+ * `GameLoop.tsx` passes `speedProgress(runtime.speed)` and nothing else, so the
+ * composition is reproduced here rather than the raw energies being guessed at.
+ * The wiring itself is a line in a `useFrame` and is not reachable from a pure
+ * test; what *is* testable, and what actually went wrong, is what the score
+ * sounds like at the speeds a run really visits.
+ */
+function scoreAt(speed: number): MusicIntensity {
+  return { energy: speedProgress(speed), tension: 0, running: true };
+}
+
+/**
+ * The normalisation this replaced - `(speed - start) / (max - start)` - kept as
+ * a live expression so the mutation checks below measure it rather than
+ * describe it. It is exactly zero at the speed every run opens at.
+ */
+function zeroAnchoredProgress(speed: number): number {
+  return clamp01((speed - TUNING.speed.start) / (TUNING.speed.max - TUNING.speed.start));
+}
+
+function rolesOverCycle(level: MusicIntensity): Set<VoiceRole> {
+  return new Set(
+    cycle(level)
+      .flat()
+      .map((voice) => voice.role),
+  );
 }
 
 describe('the form', () => {
@@ -87,7 +120,9 @@ describe('the form', () => {
     const bassOf = (phrase: number) =>
       Array.from({ length: BARS_PER_PHRASE }, (_, bar) => {
         const index = (phrase * BARS_PER_PHRASE + bar) * STEPS_PER_BAR;
-        return voicesForStep(index, RUNNING).find((v) => v.role === 'bass')?.frequency.toFixed(1);
+        return voicesForStep(index, RUNNING)
+          .find((v) => v.role === 'bass')
+          ?.frequency.toFixed(1);
       }).join(',');
 
     expect(bassOf(0)).not.toBe(bassOf(1));
@@ -122,7 +157,11 @@ describe('the form', () => {
 describe('what the player is doing', () => {
   it('sits still on the menus', () => {
     // No arpeggio, no kit, nothing driving - just harmony behind the buttons.
-    const roles = new Set(cycle(MENU).flat().map((voice) => voice.role));
+    const roles = new Set(
+      cycle(MENU)
+        .flat()
+        .map((voice) => voice.role),
+    );
     expect(roles.has('arp')).toBe(false);
     expect(roles.has('kick')).toBe(false);
     expect(roles.has('hat')).toBe(false);
@@ -151,27 +190,85 @@ describe('what the player is doing', () => {
     // among six raw ones, which is the mix that was reported as annoying.
     for (const voice of cycle(FLAT_OUT).flat()) {
       if (voice.role === 'hat' || voice.role === 'kick') continue;
-      expect(`${voice.role} cutoff`).toBe(`${voice.role} ${voice.cutoff ? 'cutoff' : 'unfiltered'}`);
+      expect(`${voice.role} cutoff`).toBe(
+        `${voice.role} ${voice.cutoff ? 'cutoff' : 'unfiltered'}`,
+      );
     }
   });
 
-  it('holds the kit back until the run is moving', () => {
-    const crawling: MusicIntensity = { energy: 0.05, tension: 0, running: true };
-    const roles = new Set(cycle(crawling).flat().map((voice) => voice.role));
-    expect(roles.has('kick')).toBe(false);
-    expect(roles.has('hat')).toBe(false);
+  it('brings the kit in with the run, not half a minute into it', () => {
+    /*
+     * This used to be asserted at an energy of 0.05, which the game can no
+     * longer produce and, it turns out, never should have: the loop now feeds
+     * `speedProgress`, whose floor at the opening speed is 0.58, so `music.ts`'s
+     * own `energy > 0.15` gate cannot fail during a run at all. Rewritten to
+     * the invariant that replaced it rather than loosened, because the old one
+     * was defending the defect - under the previous normalisation the score sat
+     * with no percussion for the first nine seconds of every run and no
+     * sixteenths for the first thirty-eight, while the player was already doing
+     * 21 units a second. What holds the kit back is the run not having started.
+     */
+    const idle = rolesOverCycle(MENU);
+    expect(idle.has('kick')).toBe(false);
+    expect(idle.has('hat')).toBe(false);
 
-    // And brings it in once it is. Without this the test above passes on a kit
-    // that was never wired up at all.
-    const moving = new Set(cycle(FLAT_OUT).flat().map((voice) => voice.role));
-    expect(moving.has('kick')).toBe(true);
-    expect(moving.has('hat')).toBe(true);
+    const opening = rolesOverCycle(scoreAt(TUNING.speed.start));
+    expect(opening.has('kick')).toBe(true);
+    expect(opening.has('hat')).toBe(true);
+  });
+
+  it('is measured against a normalisation that could fail it', () => {
+    // The counterweight, and the mutation. Drive the identical arrangement from
+    // the old anchor and the opening of a run has no kit whatsoever - so the
+    // test above is discriminating between two real wirings, not restating that
+    // `music.ts` has drums in it somewhere.
+    expect(zeroAnchoredProgress(TUNING.speed.start)).toBe(0);
+
+    const opening = rolesOverCycle({
+      energy: zeroAnchoredProgress(TUNING.speed.start),
+      tension: 0,
+      running: true,
+    });
+    expect(opening.has('kick')).toBe(false);
+    expect(opening.has('hat')).toBe(false);
+  });
+
+  it('still has somewhere to go by the top of the speed ramp', () => {
+    /*
+     * The other counterweight. A floor under the energy is trivially satisfied
+     * by pinning it to 1, which would open every run at full tilt and leave the
+     * score with nothing to say about the next 115 seconds. The build now lives
+     * in the *continuous* parameters rather than in instruments arriving, so
+     * that is where it is measured: the filter and the hat density.
+     */
+    const cutoffAt = (speed: number) => {
+      const arp = voicesForStep(0, scoreAt(speed)).find((voice) => voice.role === 'arp');
+      if (!arp?.cutoff) throw new Error('no arpeggio to measure');
+      return arp.cutoff;
+    };
+    const hatsAt = (speed: number) =>
+      cycle(scoreAt(speed))
+        .flat()
+        .filter((voice) => voice.role === 'hat').length;
+
+    expect(cutoffAt(TUNING.speed.start)).toBeLessThan(cutoffAt(TUNING.speed.max) * 0.75);
+    expect(hatsAt(TUNING.speed.max)).toBeGreaterThan(hatsAt(TUNING.speed.start) * 2);
   });
 
   it('only sounds the warning when the patrol is close', () => {
-    const safe = new Set(cycle({ energy: 1, tension: 0, running: true }).flat().map((v) => v.role));
+    const safe = new Set(
+      cycle({ energy: 1, tension: 0, running: true })
+        .flat()
+        .map((v) => v.role),
+    );
     expect(safe.has('tension')).toBe(false);
-    expect(new Set(cycle(FLAT_OUT).flat().map((v) => v.role)).has('tension')).toBe(true);
+    expect(
+      new Set(
+        cycle(FLAT_OUT)
+          .flat()
+          .map((v) => v.role),
+      ).has('tension'),
+    ).toBe(true);
   });
 });
 

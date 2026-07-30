@@ -33,7 +33,6 @@ export interface HudSnapshot {
   coins: number;
   distance: number;
   multiplier: number;
-  speed: number;
   /** Seconds left in a timed mode, or null when the mode is untimed. */
   timeRemaining: number | null;
   /** Seconds left of the avalanche behind the player. Zero when clear. */
@@ -42,10 +41,32 @@ export interface HudSnapshot {
   trickPending: number;
   /** Tricks completed this flight, for sizing the readout. */
   trickChain: number;
+  /** Obstacles cleared without a slip. Drives the meter under the score. */
+  combo: number;
+  /** Longest combo this run, for the results card. */
+  bestCombo: number;
   /** Which control the opening coach is asking for, or null. */
   coach: CoachHint | null;
   powerUps: ActivePowerUpView[];
 }
+
+/**
+ * What the frame loop is allowed to hand `publish`.
+ *
+ * Looser than {@link HudSnapshot} in two directions, and both are staging
+ * rather than design:
+ *
+ * - `speed` is gone from the snapshot. It was published ten times a second and
+ *   read by nothing anywhere in `src/` - and nothing React-side should hold a
+ *   value that changes on every publish in the first place. It is still
+ *   *accepted* here, and discarded, so the two call sites that send it can drop
+ *   it on their own schedule instead of this becoming a coordinated edit across
+ *   three files. Delete the field once they have.
+ * - `combo` and `bestCombo` are optional until the loop publishes them; the
+ *   meter simply does not appear until it does.
+ */
+export type HudPublish = Omit<HudSnapshot, 'combo' | 'bestCombo'> &
+  Partial<Pick<HudSnapshot, 'combo' | 'bestCombo'>> & { speed?: number };
 
 interface GameStore extends HudSnapshot {
   phase: Phase;
@@ -57,7 +78,7 @@ interface GameStore extends HudSnapshot {
   setDeathCause: (cause: DeathCause) => void;
   setMode: (mode: GameModeId) => void;
   /** Called from the game loop. No-ops when nothing visible changed. */
-  publish: (snapshot: HudSnapshot) => void;
+  publish: (snapshot: HudPublish) => void;
   resetHud: () => void;
 }
 
@@ -66,11 +87,12 @@ const EMPTY_HUD: HudSnapshot = {
   coins: 0,
   distance: 0,
   multiplier: 1,
-  speed: 0,
   timeRemaining: null,
   avalanche: 0,
   trickPending: 0,
   trickChain: 0,
+  combo: 0,
+  bestCombo: 0,
   coach: null,
   powerUps: [],
 };
@@ -106,6 +128,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   publish: (snapshot) => {
     const state = get();
+    const combo = snapshot.combo ?? 0;
+    const bestCombo = snapshot.bestCombo ?? 0;
+
     // The HUD shows whole numbers, so only a change the player can actually
     // see is worth a re-render.
     if (
@@ -118,12 +143,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Math.ceil(state.timeRemaining ?? 0) === Math.ceil(snapshot.timeRemaining ?? 0) &&
       Math.ceil(state.avalanche) === Math.ceil(snapshot.avalanche) &&
       state.trickPending === snapshot.trickPending &&
+      // Compared even though a coin almost always moves `coins` too: losing a
+      // combo moves this and nothing else, and the meter emptying is the whole
+      // point of having drawn it.
+      state.combo === combo &&
       state.coach === snapshot.coach &&
       powerUpSignature(state.powerUps) === powerUpSignature(snapshot.powerUps)
     ) {
       return;
     }
-    set(snapshot);
+
+    // Written out field by field rather than spread, so anything the loop sends
+    // that the HUD does not render - see {@link HudPublish} - stops here rather
+    // than becoming a key on the store nothing declared.
+    set({
+      score: snapshot.score,
+      coins: snapshot.coins,
+      distance: snapshot.distance,
+      multiplier: snapshot.multiplier,
+      timeRemaining: snapshot.timeRemaining,
+      avalanche: snapshot.avalanche,
+      trickPending: snapshot.trickPending,
+      trickChain: snapshot.trickChain,
+      combo,
+      bestCombo,
+      coach: snapshot.coach,
+      powerUps: snapshot.powerUps,
+    });
   },
 
   resetHud: () => set({ ...EMPTY_HUD, powerUps: [] }),

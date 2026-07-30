@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLOSS, saturate } from '@/game/config/visuals';
+import { patchRim } from '@/game/render/atmosphere';
 
 export interface Piece {
   geometry: THREE.BufferGeometry;
@@ -91,9 +92,22 @@ export function assemble(pieces: Piece[]): THREE.BufferGeometry {
 /**
  * One material for everything built this way.
  *
- * Phong rather than Lambert so the low sun and the cool rim light actually
- * glint off the geometry - see `GLOSS` in `config/visuals`. Flat shading keeps
- * the highlight faceted, which suits low-poly far better than a smooth sweep.
+ * Phong rather than Lambert so the low sun and the cool fill actually glint off
+ * the geometry - see `GLOSS` in `config/visuals`. Flat shading keeps the
+ * highlight faceted, which suits low-poly far better than a smooth sweep.
+ *
+ * Every material from here carries the Fresnel rim, which is the whole reason
+ * anything built this way has an outline against the snow. It is applied at
+ * this one point rather than at each of the six call sites for the same reason
+ * `bakeColor` saturates here: a treatment that has to be remembered is a
+ * treatment that will be forgotten the first time a seventh caller appears.
+ * `patchRim` is a no-op on the draw call count - it adds a handful of ALU to a
+ * shader that is already running and nothing else.
+ *
+ * The board shares the yeti's material and therefore takes the rim too. That is
+ * deliberate: a lacquered base catching the last of the sun along its edge is
+ * exactly what the term is for, and splitting it out would cost a second
+ * material to remove an effect worth having.
  */
 export interface GlossSpec {
   /** Highlight colour, and therefore its strength - a dark specular is subtle. */
@@ -103,12 +117,14 @@ export interface GlossSpec {
 }
 
 export function vertexColorMaterial(gloss: GlossSpec = GLOSS.prop): THREE.MeshPhongMaterial {
-  return new THREE.MeshPhongMaterial({
-    vertexColors: true,
-    flatShading: true,
-    specular: new THREE.Color(gloss.specular),
-    shininess: gloss.shininess,
-  });
+  return patchRim(
+    new THREE.MeshPhongMaterial({
+      vertexColors: true,
+      flatShading: true,
+      specular: new THREE.Color(gloss.specular),
+      shininess: gloss.shininess,
+    }),
+  );
 }
 
 /**

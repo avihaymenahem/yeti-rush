@@ -28,12 +28,27 @@ import type { ModelSpec } from '@/game/render/useModel';
  * The boulder's fit, shared by every variant.
  *
  * Fitted by height, since the height is what makes this un-jumpable and
- * therefore a dodge. Cooled towards slate, because the Nature Kit rocks are
+ * therefore a dodge. Recoloured to slate, because the Nature Kit rocks are
  * sandy brown and read as desert against an alpine sky.
+ *
+ * **At full strength, and that is the whole point.** The target mirrors
+ * `OBSTACLES.boulder.color`, which is the authored value and the one thing this
+ * kind's legibility is reasoned about in - see the note there. The amount is not
+ * a taste dial: `bakeVertexColor` *lerps* the pack's own material colour towards
+ * the target, and this rock's body material is `_defaultMat`, pure white. So the
+ * amount is how much of a white base survives into an obstacle meant to be wet
+ * slate. At the 0.72 this used to sit at, 28% of that white came through and the
+ * body rendered at L=170 against a run whose maximum is 171 - the one obstacle
+ * the player *must* change lane for was the one that disappeared into the snow.
+ * At full strength it lands at 71, clear below the darkest snow on the slope.
+ *
+ * Pointing a partial lerp at the darker target does not fix it either; that
+ * lands at 147, still inside the run's 98-171. Both halves are load-bearing, and
+ * `tests/ground.test.ts` asserts both.
  */
 const BOULDER_FIT = {
   fitHeight: 3.0,
-  recolor: { color: '#8d9aa5', amount: 0.72 },
+  recolor: { color: '#556472', amount: 1 },
 } as const;
 
 /**

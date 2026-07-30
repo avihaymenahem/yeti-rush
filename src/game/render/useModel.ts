@@ -32,6 +32,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import colormapUrl from '@/assets/models/colormap.png';
 import { GLOSS, IMPORT_SATURATION } from '@/game/config/visuals';
+import { patchRim } from '@/game/render/atmosphere';
 
 export interface ModelSpec {
   url: string;
@@ -239,20 +240,24 @@ function prepare(scene: THREE.Object3D, spec: ModelSpec, atlas: THREE.Texture): 
 
   // Phong so imported art picks up the same specular the procedural props do -
   // a rock or a pine next to a glossy chalet with no highlight of its own reads
-  // as belonging to a different game.
-  const material = spec.textured
-    ? new THREE.MeshPhongMaterial({
-        map: atlas,
-        flatShading: true,
-        specular: new THREE.Color(GLOSS.prop.specular),
-        shininess: GLOSS.prop.shininess,
-      })
-    : new THREE.MeshPhongMaterial({
-        vertexColors: true,
-        flatShading: meshCount > 1,
-        specular: new THREE.Color(GLOSS.prop.specular),
-        shininess: GLOSS.prop.shininess,
-      });
+  // as belonging to a different game. Same reasoning for the Fresnel rim: an
+  // imported rock without one would be the single object on the slope with no
+  // edge against it, which is more conspicuous than no rim anywhere.
+  const material = patchRim(
+    spec.textured
+      ? new THREE.MeshPhongMaterial({
+          map: atlas,
+          flatShading: true,
+          specular: new THREE.Color(GLOSS.prop.specular),
+          shininess: GLOSS.prop.shininess,
+        })
+      : new THREE.MeshPhongMaterial({
+          vertexColors: true,
+          flatShading: meshCount > 1,
+          specular: new THREE.Color(GLOSS.prop.specular),
+          shininess: GLOSS.prop.shininess,
+        }),
+  );
 
   if (import.meta.env.DEV && !reported.has(spec.url)) {
     reported.add(spec.url);

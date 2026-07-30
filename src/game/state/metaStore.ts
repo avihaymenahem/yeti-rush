@@ -43,16 +43,49 @@ import { getItem, setItem } from '@/platform/storage';
 /** Milliseconds to coalesce writes over. */
 const WRITE_DEBOUNCE = 400;
 
+/**
+ * What the run that just ended did, for the results card.
+ *
+ * Not persisted and not part of the save: it is a report on one run, replaced
+ * by the next one. It lives here rather than in the HUD snapshot because both
+ * numbers are things only `commitRun` knows - the mission diff can only be
+ * taken against the progress that existed a moment before, and by the time the
+ * card renders that progress has already been overwritten.
+ */
+export interface LastRunSummary {
+  /** Longest unbroken run of obstacles cleared. */
+  bestCombo: number;
+  /**
+   * Missions this run pushed over the line.
+   *
+   * The whole instance rather than the id, so the card can name the objective
+   * and its reward without looking anything up. Claiming is still a separate,
+   * deliberate act on the Missions screen - a mission completing is news, not a
+   * transaction.
+   */
+  completedMissions: MissionInstance[];
+}
+
+const NO_LAST_RUN: LastRunSummary = { bestCombo: 0, completedMissions: [] };
+
 interface MetaStore {
   save: SaveData;
   /** False until the first load resolves; screens wait on this. */
   loaded: boolean;
   /** Today's missions, regenerated from the date rather than stored. */
   missions: MissionInstance[];
+  /** Set by `commitRun`; read by the results card. */
+  lastRun: LastRunSummary;
 
   load: () => Promise<void>;
-  /** Applies a finished run: coins, records, run count, mission progress. */
-  commitRun: (stats: RunStats & { score: number; mode: string }) => void;
+  /**
+   * Applies a finished run: coins, records, run count, mission progress.
+   *
+   * Returns the same summary it stores on `lastRun`. Returning it as well as
+   * storing it is what makes the mission diff testable without a store read,
+   * and callers are free to ignore it.
+   */
+  commitRun: (stats: RunStats & { score: number; mode: string }) => LastRunSummary;
   buySkin: (id: string) => boolean;
   equipSkin: (id: string) => boolean;
   buyCharacter: (id: string) => boolean;
@@ -111,6 +144,7 @@ export const useMetaStore = create<MetaStore>((set, get) => ({
   save: createDefaultSave(),
   loaded: false,
   missions: [],
+  lastRun: NO_LAST_RUN,
 
   load: async () => {
     const raw = await getItem(SAVE_KEY);
@@ -155,6 +189,17 @@ export const useMetaStore = create<MetaStore>((set, get) => ({
     // Insert then re-sort and trim per mode, so a strong run in one mode can
     // never evict another mode's history.
     const leaderboard = trimLeaderboard([...save.leaderboard, entry]);
+    const progress = applyRunToProgress(missions, save.missions, stats);
+
+    // Which objectives this run finished, taken as a diff rather than read off
+    // the new progress: a mission that was already complete before the run
+    // started is not news, and listing it on every card afterwards would teach
+    // the player to stop reading the list.
+    const completedMissions = missions.filter(
+      (mission) =>
+        !isComplete(mission, save.missions[mission.id] ?? 0) &&
+        isComplete(mission, progress[mission.id] ?? 0),
+    );
 
     const next: SaveData = {
       ...save,
@@ -163,11 +208,14 @@ export const useMetaStore = create<MetaStore>((set, get) => ({
       bestDistance: Math.max(save.bestDistance, stats.distance),
       totalRuns: save.totalRuns + 1,
       leaderboard,
-      missions: applyRunToProgress(missions, save.missions, stats),
+      missions: progress,
     };
 
-    set({ save: next });
+    const lastRun: LastRunSummary = { bestCombo: stats.bestCombo, completedMissions };
+
+    set({ save: next, lastRun });
     scheduleWrite(next);
+    return lastRun;
   },
 
   setSetting: (key, value) => {

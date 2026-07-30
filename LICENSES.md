@@ -62,19 +62,17 @@ this file exists so the project can prove provenance, not because the licence
 demands it. Kenney asks for a credit as a courtesy, which the game should carry
 in a credits screen before release.
 
-## Unrecorded — `assets/splash.png`
-
-The poster is the single most visible piece of art in the project: it is the
-launch splash, the launcher icon, the favicon and the Play feature graphic. Its
-origin is not recorded anywhere, and it is the one asset here that cannot prove
-its provenance.
-
-That has to be fixed before the game is published. Google Play requires the
-developer to hold the rights to every listing asset, and the icon derived from
-this file is on the store page and on every player's home screen. Whoever knows
-where it came from should add the row.
-
 ## Not third-party
+
+`assets/splash.png` is original work by the project author, Avihay Menahem. It
+is not from an asset pack and has no upstream licence.
+
+Worth stating rather than leaving implied, because it is the most widely
+reproduced image in the project - `npm run splash` and `npm run icon` cut the
+launch poster, the launcher icon, the favicon and the Play feature graphic out
+of it, so it is on the store listing and on every player's home screen. Play
+requires the developer to hold the rights to every listing asset, and this is
+where that is on record.
 
 The yeti, chalets, ramps, coins, power-up pickups, ski patrol and overhead
 barriers are all built procedurally from primitives in `src/game/render/`. The

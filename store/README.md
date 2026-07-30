@@ -13,7 +13,11 @@ The artwork here is generated — `npm run icon` rebuilds `icon-512.png` and
 | **Upload key** | Not in this repository and must never be. See the comment at the top of [`android/app/build.gradle`](../android/app/build.gradle) for the `keytool` command and the `keystore.properties` it expects. Back the `.jks` up somewhere that is not this machine — Play accepts updates signed by that key and no other, for the life of the listing. |
 | **Twelve testers, fourteen days** | Personal developer accounts created after 13 November 2023 must run a closed test with at least twelve testers opted in for fourteen consecutive days before production access can even be applied for. Start this first; it is the only item here measured in weeks. |
 | **Screenshots** | At least two phone screenshots, and 7"/10" tablet ones unless you want the "not designed for tablets" note on the listing. Take them on a real device — the demo in a desktop browser is the wrong aspect ratio and the wrong frame rate. |
-| **The splash art's provenance** | [`LICENSES.md`](../LICENSES.md) accounts for every model in the game but says nothing about `assets/splash.png`, which is the source of the icon, the launch poster and the feature graphic. Play requires you to hold the rights to listing assets. Record where it came from. |
+
+The splash art's provenance was on this list and is now settled: `assets/splash.png`
+is the author's own work, recorded in [`LICENSES.md`](../LICENSES.md). Every
+listing asset is either that file, cut down by `npm run icon`, or text from this
+document — so the rights question Play asks is answered.
 
 ## Listing
 

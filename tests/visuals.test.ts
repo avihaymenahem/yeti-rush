@@ -168,7 +168,11 @@ describe('the sky is exempt', () => {
    * has to hold the actual numbers rather than a property they happen to have.
    */
   it('keeps the authored sky, sun and fog exactly as written', () => {
-    expect(PALETTE.skyZenith).toBe('#0a2148');
+    // The zenith is re-authored, not merely nudged: it is aimed at the top of
+    // the launch poster now that the tone curve no longer lifts the toe. See
+    // `PALETTE.skyZenith`. These literals track the authored values - what they
+    // guard is that none of them acquires a `saturate()` wrapper.
+    expect(PALETTE.skyZenith).toBe('#071a3a');
     expect(PALETTE.skyMid).toBe('#3a78ad');
     expect(PALETTE.skyHorizon).toBe('#e08a3c');
     expect(PALETTE.sunCore).toBe('#fff6e0');

@@ -1,7 +1,7 @@
 {
   "name": "yeti-rush",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Yeti Rush - a 3-lane snow endless runner",
   "scripts": {

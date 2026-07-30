@@ -210,7 +210,36 @@ export function App() {
           antialias: true,
           powerPreference: 'high-performance',
           alpha: false,
-          toneMapping: THREE.ACESFilmicToneMapping,
+          /*
+           * Khronos PBR Neutral, **not ACES**, and this is the single most
+           * consequential line in the render setup.
+           *
+           * ACES is a film operator: it exists to bring a scene-referred HDR
+           * capture into a display, and the desaturating shoulder that makes a
+           * blown sky look photographic is doing the opposite job to the one
+           * this game needs. Nothing here is scene-referred. Every colour in
+           * `visuals.ts` is authored by hand, in gamut, to be looked at.
+           *
+           * Measured against the launch poster, which is the target: the play
+           * space carried a chroma mean of 37.5 against the poster's 77.6, and
+           * 25.8% of its pixels above chroma 40 against the poster's 82.7%.
+           * Modelled through the real light rig, ACES was taking the piste from
+           * an albedo of chroma 93 to a pixel of chroma 30, and - worse - it was
+           * rendering the *warm* snow albedo `#fff2e0` as `#dcd7ca`, chroma 18.
+           * The warm-key-against-cool-shadow split this entire palette is built
+           * on was being erased by the curve after the lighting had produced it.
+           *
+           * Neutral compresses only the top end and leaves in-gamut colour below
+           * a peak of 0.76 essentially untouched, which is exactly the contract
+           * a hand-authored palette wants. Same scene, same lights: piste chroma
+           * 30 -> 51, lit snow chroma 18 -> 44, lit-to-shadow range 147 -> 161,
+           * and a fully lit white reaches 236 rather than 224.
+           *
+           * **Every hex in `visuals.ts` is an input to this curve.** Swapping the
+           * operator re-grades the whole game, so `tests/atmosphere.test.ts`
+           * mirrors whichever one is set here and must be changed with it.
+           */
+          toneMapping: THREE.NeutralToneMapping,
           toneMappingExposure: ATMOSPHERE.exposure,
           outputColorSpace: THREE.SRGBColorSpace,
         }}

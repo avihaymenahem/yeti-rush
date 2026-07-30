@@ -35,42 +35,53 @@ import { cameraDistanceFor } from '@/game/systems/camera';
 /*
  * --- The pipeline, mirrored from three's own chunks ---
  *
- * `ACESFilmicToneMapping` from `tonemapping_pars_fragment` and the sRGB encode
+ * `NeutralToneMapping` from `tonemapping_pars_fragment` and the sRGB encode
  * from `colorspace_pars_fragment`, at `ATMOSPHERE.exposure`. Reproduced rather
  * than imported because three only ships them as GLSL strings.
+ *
+ * **This must be whichever operator `App.tsx` constructs the renderer with.**
+ * It mirrored ACES until the grade was measured against the launch poster and
+ * the curve turned out to be what was draining the palette - see the comment on
+ * `toneMapping` there. A mirror of the wrong operator is worse than no mirror:
+ * every threshold below would still pass, against a pipeline the game does not
+ * run.
  */
-
-const ACES_INPUT = [
-  [0.59719, 0.35458, 0.04823],
-  [0.076, 0.90834, 0.01566],
-  [0.0284, 0.13383, 0.83777],
-] as const;
-
-const ACES_OUTPUT = [
-  [1.60475, -0.53108, -0.07367],
-  [-0.10208, 1.10813, -0.00605],
-  [-0.00327, -0.07276, 1.07602],
-] as const;
 
 type Rgb = [number, number, number];
 
-function transform(matrix: readonly (readonly number[])[], v: Rgb): Rgb {
-  return matrix.map((row) => row[0]! * v[0] + row[1]! * v[1] + row[2]! * v[2]) as Rgb;
-}
+/**
+ * Khronos PBR Neutral, ported line for line from three's GLSL.
+ *
+ * Note what it does *not* do: there is no per-channel curve and no gamut
+ * rotation. Below `StartCompression` a colour passes through with only the
+ * black-point offset taken off it, which is the whole reason it was chosen -
+ * a hand-authored palette reaches the screen as the colour it was authored as.
+ */
+function neutralToneMap(v: Rgb): Rgb {
+  const startCompression = 0.8 - 0.04;
+  const desaturation = 0.15;
 
-function rrtAndOdtFit(v: Rgb): Rgb {
-  return v.map((x) => {
-    const a = x * (x + 0.0245786) - 0.000090537;
-    const b = x * (0.983729 * x + 0.43295) + 0.238081;
-    return a / b;
-  }) as Rgb;
+  const exposed = v.map((x) => x * ATMOSPHERE.exposure) as Rgb;
+  const min = Math.min(...exposed);
+  const offset = min < 0.08 ? min - 6.25 * min * min : 0.04;
+  const shifted = exposed.map((x) => x - offset) as Rgb;
+
+  const peak = Math.max(...shifted);
+  if (peak < startCompression) return shifted;
+
+  const d = 1 - startCompression;
+  const newPeak = 1 - (d * d) / (peak + d - startCompression);
+  const scaled = shifted.map((x) => (x * newPeak) / peak) as Rgb;
+
+  // The only desaturation in the operator, and it applies solely to what has
+  // been compressed - highlights roll towards white rather than towards a hue.
+  const g = 1 - 1 / (desaturation * (peak - newPeak) + 1);
+  return scaled.map((x) => x * (1 - g) + newPeak * g) as Rgb;
 }
 
 /** Scene-linear in, sRGB-encoded display value out. */
 function throughToneCurve(linear: Rgb): Rgb {
-  const exposed = linear.map((x) => (x * ATMOSPHERE.exposure) / 0.6) as Rgb;
-  const mapped = transform(ACES_OUTPUT, rrtAndOdtFit(transform(ACES_INPUT, exposed)));
-  return mapped.map((x) => {
+  return neutralToneMap(linear).map((x) => {
     const c = Math.min(1, Math.max(0, x));
     return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
   }) as Rgb;

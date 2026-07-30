@@ -141,8 +141,18 @@ export const PALETTE = {
    * still lands somewhere near 5-10% *after* the curve.
    *
    * If these look wrong on screen, check the shader before touching the hexes.
+   *
+   * **The zenith moved with the operator swap and the exposure that followed
+   * it.** At `#0a2148` it rendered to 11.2% display luminance under the new
+   * curve, over the 10% ceiling `tests/atmosphere.test.ts` holds it to - the
+   * dome has to keep a genuinely deep top or the gradient stops being a
+   * journey. Rather than pick a number that merely clears the bound, this is
+   * aimed at `#051844`, which is `SPLASH_BACKGROUND`: the colour sampled off
+   * the top of the launch poster. It now renders `#00193e` at 8.8% against the
+   * poster's 9.1%, so the sky the player sees when the game opens and the sky
+   * they see when it starts are, for the first time, the same sky.
    */
-  skyZenith: '#0a2148',
+  skyZenith: '#071a3a',
   skyMid: '#3a78ad',
   skyHorizon: '#e08a3c',
 
@@ -636,20 +646,34 @@ export const SPLASH_BACKGROUND = '#051844';
  */
 export const GLOSS = {
   /**
-   * Snow. Broad and soft: a wide lobe reads as a sheen across the whole slope
-   * rather than a hotspot, and the specular is tinted to the sky it is
-   * reflecting rather than left white.
+   * Snow. A near-field sheen that falls away with distance, tinted to the sky
+   * it is reflecting rather than left white.
    *
-   * `shininess` came down from 14, and not because the highlight was too tight
-   * - because there was not one. The ground is a horizontal plane, the key sits
-   * at `[-46, 52, -20]` and the eye is barely three metres up, which puts `N.H`
-   * across the whole visible slope somewhere around 0.66 to 0.75. `0.75^14` is
-   * 0.018: the specular was not being clipped by the tone curve, it was never
-   * generated, while still costing the power call on nearly every ground
-   * fragment in the frame. `0.75^3` is 0.42, about thirty times as much
-   * delivered for exactly the same arithmetic.
+   * **`shininess` 3 was a measured mistake and this is the correction.** The
+   * reasoning that produced it was that `0.75^14` is 0.018, so a tight lobe
+   * generated no highlight at all. That is true of the power term alone and it
+   * omits the rest of three's `D_BlinnPhong`, which scales by
+   * `(shininess * 0.5 + 1)` - eight at 14 against two and a half at 3. The real
+   * change was about sevenfold, not the thirtyfold claimed, and the number it
+   * landed on has a worse property than being too small.
+   *
+   * A flat plane under a directional light has only one thing varying `N.H`
+   * across it: the view vector. Traced over the visible slope, `N.H` runs from
+   * 0.88 under the rider to 0.61 at the fog line, so at `shininess` 3 the lobe
+   * delivers 0.55 down to 0.18 - **it never switches off anywhere on screen.**
+   * That is not a sheen, it is a near-white veil laid over the largest surface
+   * in every frame, and it was the second biggest reason the game looked pale:
+   * on its own it cost the piste 23 of its 93 points of chroma and added 26
+   * levels of luminance. An additive near-white term is the most efficient way
+   * there is to desaturate something.
+   *
+   * At 8 the same trace runs 0.58 to 0.031 - a real glint in the near field
+   * that is gone by mid-distance, which is what "the low sun glints off the
+   * snow" is supposed to mean and what the original Lambert-only complaint was
+   * actually asking for. The falloff is the feature; a specular that is
+   * everywhere is indistinguishable from raising the albedo.
    */
-  snow: { specular: '#cfe6fb', shininess: 3 },
+  snow: { specular: '#cfe6fb', shininess: 8 },
   /** Painted timber and plaster - a modest sheen. */
   prop: { specular: '#f6f2e8', shininess: 26 },
   /**
@@ -666,16 +690,38 @@ export const GLOSS = {
 
 export const ATMOSPHERE = {
   /**
-   * Exposure into the filmic tone curve. ACES already lifts and desaturates,
-   * so pushing exposure above 1 on an already-pale snow palette is what turns
-   * the whole scene milky.
+   * Exposure into the tone curve.
    *
-   * Pulled slightly under 1. ACES desaturates hardest in the shoulder, and on a
-   * snow scene the snow *is* the shoulder - so a little less exposure keeps
-   * more of the frame off the part of the curve that drains the colour out of
-   * it, without giving up the highlight rolloff that stops the slope clipping.
+   * **Read this together with the operator in `App.tsx`; the two are one
+   * decision.** It sat at 0.92 for as long as that operator was ACES, on the
+   * argument that ACES desaturates hardest in its shoulder and a snow scene
+   * lives in the shoulder, so backing off exposure kept colour. The argument
+   * was right about the mechanism and it was treating the symptom: the cure for
+   * a curve that drains chroma is not to use less of the curve, it is a curve
+   * that does not drain chroma.
+   *
+   * With Neutral in place the number has to move, and *upwards*, for a reason
+   * that is easy to miss. ACES lifts its toe - it is a filmic S - so swapping it
+   * out for an operator that is near-linear below 0.76 dropped the whole frame,
+   * most visibly the sky: the dome fell about 25 levels at the horizon and
+   * opened a seam against `PALETTE.fog`, which is a raw display value and so
+   * did not move with it. `tests/atmosphere.test.ts` caught that within a run.
+   *
+   * 1.2 is where the horizon lands back on the fog - 152 against 154, a
+   * two-level step along a line that is meant to be invisible - and it is
+   * *measured against that*, not chosen for brightness. What it buys on the way
+   * is the top end the frame did not have: a fully lit white reaches 245 here
+   * against ACES's 224 at 0.92, and the play space had **0.3% of its pixels
+   * above luminance 204 where the launch poster has 17.5%**. Nothing in the
+   * game was reaching white, which is a large part of why it read as flat.
+   *
+   * Do not raise it further to chase the poster's brightness. Past about 1.3
+   * the lit snow crosses Neutral's compression knee, where the operator's one
+   * desaturating term lives, and the frame starts giving back the chroma this
+   * whole change exists to recover - the lit-to-shadow range is already turning
+   * over at 1.3 in the same measurement.
    */
-  exposure: 0.92,
+  exposure: 1.2,
   /**
    * Exponential fog density.
    *

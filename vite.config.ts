@@ -33,7 +33,19 @@ export default defineConfig({
   assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.hdr'],
   server: {
     host: true, // needed for LAN phone testing: `npm run dev:host`
-    port: 5173,
+    /*
+     * `PORT` first, 5173 only as the fallback. Vite does not read `PORT` itself,
+     * so a bare `port: 5173` is a hardcoded port however the server is launched
+     * - and it fails in the least obvious way. Nothing errors: `strictPort` is
+     * off, so a clash makes Vite quietly serve on 5174 instead, and any tool
+     * that assigned a free port and then probed it finds nothing there.
+     *
+     * The game itself has no opinion about the port. It makes no network
+     * requests at all - `tests/release.test.ts` fails on a `fetch` appearing
+     * anywhere in `src/` - so there is no callback URL or allowed origin pinned
+     * to a number here.
+     */
+    port: Number(process.env.PORT) || 5173,
   },
   build: {
     target: 'es2022',

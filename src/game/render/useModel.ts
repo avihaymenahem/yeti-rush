@@ -15,11 +15,15 @@
  * which is what lets every obstacle of a kind draw in a single instanced call.
  *
  * The atlas is assigned here rather than left to the loader on purpose. The
- * Holiday Kit GLBs reference `Textures/colormap.png` by relative path, which
- * resolves differently under the dev server than in a hashed production build,
- * so the loader fails to find it in at least one of them and silently produces
+ * Holiday Kit GLBs reference `Textures/colormap.png` by relative path, and that
+ * path resolves to nothing in *either* environment - there is no `Textures/`
+ * directory in the source tree or in a build, so the loader silently produces
  * untextured white models. Importing the atlas through the bundler and
- * assigning it makes both environments behave identically.
+ * assigning it is what makes both environments work at all.
+ *
+ * Because that reference is never going to resolve, the request is stubbed out
+ * rather than left to fail - see `glbAtlas.ts`. Doing so is only sound while the
+ * material the loader builds is discarded, which is the case immediately below.
  *
  * The fit transform (scale to a target size, ground-align, rotate) is baked
  * into the geometry rather than applied per instance, so the hot path only ever
@@ -33,6 +37,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import colormapUrl from '@/assets/models/colormap.png';
 import { GLOSS, IMPORT_SATURATION } from '@/game/config/visuals';
 import { patchRim } from '@/game/render/atmosphere';
+import { stubKitAtlasRequests } from '@/game/render/glbAtlas';
+
+// At module scope so it is in place before any loader runs. Every GLB in the
+// game is loaded through this file, so there is no path that can beat it.
+stubKitAtlasRequests();
 
 export interface ModelSpec {
   url: string;

@@ -12,7 +12,7 @@
  * fast pure-logic test like the rest of the suite.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +21,7 @@ import { LANES, TUNING } from '@/game/config/tuning';
 // what belongs here is the pair that interacts with the collider.
 import { MAX_STYLE_SCALE, OBSTACLE_MODELS, PINE_MODELS, styleScale } from '@/game/content/models';
 import { OBSTACLE_KINDS, obstacleDef, type ObstacleKind } from '@/game/content/obstacles';
+import { ATLAS_STUB_URL, isKitAtlasReference } from '@/game/render/glbAtlas';
 import {
   coinGeometry,
   PROP_BUILDERS,
@@ -43,6 +44,7 @@ function readGlbJson(buffer: Buffer): Record<string, never> & {
   accessors: { min?: number[]; max?: number[] }[];
   scenes: { nodes: number[] }[];
   scene?: number;
+  images?: { uri?: string }[];
 } {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   expect(view.getUint32(0, true)).toBe(0x46546c67); // 'glTF'
@@ -530,5 +532,89 @@ describe('coin geometry', () => {
     // Multiplied by every visible coin. Thinning the coin economy is what made
     // a richer disc affordable at all - this bound is what keeps that true.
     expect(geometry.getAttribute('position').count).toBeLessThan(700);
+  });
+});
+
+/*
+ * The stubbed atlas request.
+ *
+ * `useModel` assigns the colour atlas through the bundler and lets `glbAtlas`
+ * retire the GLBs' own reference to it. Both halves are easy to get subtly
+ * wrong in ways nothing else would catch: the reference could stop existing
+ * (making the stub dead code), or the matcher could widen far enough to swallow
+ * the real atlas - which does not throw, it textures every imported model with
+ * one transparent pixel.
+ */
+describe('the kit atlas reference', () => {
+  /** Every distinct image URI declared across the registered models. */
+  const declaredImageUris = new Set(
+    [...allSpecs, ...PINE_MODELS].flatMap((spec) =>
+      (readGlbJson(readFileSync(modelPath(spec.url))).images ?? [])
+        .map((image) => image.uri)
+        .filter((uri): uri is string => uri !== undefined),
+    ),
+  );
+
+  it('is really there, in more than one model', () => {
+    // The counterweight. Every assertion below is trivially satisfied if the
+    // GLBs stopped referencing an atlas at all, so this asserts the sample size
+    // and that the thing being worked around genuinely exists.
+    const textured = [...allSpecs, ...PINE_MODELS].filter((spec) => spec.textured);
+    expect(textured.length).toBeGreaterThanOrEqual(4);
+    expect(declaredImageUris.has('Textures/colormap.png')).toBe(true);
+  });
+
+  it('names a path that exists in neither the source tree nor a build', () => {
+    // The reason a stub is correct rather than lazy: this is not a path that
+    // resolves in one environment and not the other, it resolves in none. If a
+    // `Textures/` directory is ever added, the redirect stops being right.
+    for (const uri of declaredImageUris) {
+      expect(existsSync(MODEL_DIR + uri)).toBe(false);
+    }
+    expect(existsSync(MODEL_DIR + 'colormap.png')).toBe(true);
+  });
+
+  it('matches the reference however the loader resolves it', () => {
+    // GLTFLoader resolves the URI against the model's own URL, so what reaches
+    // the loading manager is prefixed - differently in dev and in a build.
+    expect(isKitAtlasReference('Textures/colormap.png')).toBe(true);
+    expect(isKitAtlasReference('/src/assets/models/Textures/colormap.png')).toBe(true);
+    expect(isKitAtlasReference('/assets/Textures/colormap.png')).toBe(true);
+    expect(isKitAtlasReference('/yeti-rush/assets/Textures/colormap.png')).toBe(true);
+    expect(isKitAtlasReference('http://localhost:5173/assets/Textures/colormap.png?t=1')).toBe(
+      true,
+    );
+  });
+
+  it('never matches the atlas the bundler emits', () => {
+    // The failure that would not announce itself. Widening the pattern to
+    // `colormap.png` alone catches the hashed asset too, and every textured
+    // model silently renders as a single transparent pixel.
+    expect(isKitAtlasReference('/assets/colormap-DfG7h2Ka.png')).toBe(false);
+    expect(isKitAtlasReference('/src/assets/models/colormap.png')).toBe(false);
+    expect(isKitAtlasReference('/assets/Textures/colormap-DfG7h2Ka.png')).toBe(false);
+    expect(isKitAtlasReference('/assets/textures-colormap.png')).toBe(false);
+  });
+
+  it('redirects to a PNG that actually decodes', () => {
+    // A base64 typo fails exactly like the broken path it replaces, and looks
+    // the same in the console, so the bytes are checked rather than trusted.
+    const [header, payload] = ATLAS_STUB_URL.split(',');
+    expect(header).toBe('data:image/png;base64');
+
+    const bytes = Buffer.from(payload as string, 'base64');
+    expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(bytes.subarray(12, 16).toString()).toBe('IHDR');
+    expect(bytes.readUInt32BE(16)).toBe(1); // width
+    expect(bytes.readUInt32BE(20)).toBe(1); // height
+    expect(bytes.subarray(bytes.length - 8, bytes.length - 4).toString()).toBe('IEND');
+  });
+
+  it('costs less than the atlas it stands in for', () => {
+    // The whole argument for a stub over redirecting to the real file. If this
+    // ever stops holding, redirecting is the better trade.
+    const atlasBytes = readFileSync(MODEL_DIR + 'colormap.png').length;
+    const stubBytes = Buffer.from(ATLAS_STUB_URL.split(',')[1] as string, 'base64').length;
+    expect(stubBytes).toBeLessThan(atlasBytes / 100);
   });
 });
